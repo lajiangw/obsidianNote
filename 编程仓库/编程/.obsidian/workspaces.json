@@ -1,0 +1,151 @@
+{
+  "1": {
+    "main": {
+      "id": "1aeafd60d880a90d",
+      "type": "split",
+      "children": [
+        {
+          "id": "80744dea87b012a8",
+          "type": "tabs",
+          "children": [
+            {
+              "id": "59dd3373284367b3",
+              "type": "leaf",
+              "state": {
+                "type": "markdown",
+                "state": {
+                  "file": "java基础.md",
+                  "mode": "source",
+                  "backlinks": false,
+                  "source": false
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "direction": "vertical"
+    },
+    "left": {
+      "id": "27b666fb1318e967",
+      "type": "split",
+      "children": [
+        {
+          "id": "96e1aec0d0c3f8ba",
+          "type": "tabs",
+          "children": [
+            {
+              "id": "49b768fa898baa8d",
+              "type": "leaf",
+              "state": {
+                "type": "file-explorer",
+                "state": {
+                  "sortOrder": "alphabetical"
+                }
+              }
+            },
+            {
+              "id": "92c339ff8da77b57",
+              "type": "leaf",
+              "state": {
+                "type": "search",
+                "state": {
+                  "query": "",
+                  "matchingCase": false,
+                  "explainSearch": false,
+                  "collapseAll": false,
+                  "extraContext": false,
+                  "sortOrder": "alphabetical"
+                }
+              }
+            },
+            {
+              "id": "ebf7263dd25b8492",
+              "type": "leaf",
+              "state": {
+                "type": "starred",
+                "state": {}
+              }
+            }
+          ]
+        }
+      ],
+      "direction": "horizontal",
+      "width": 200
+    },
+    "right": {
+      "id": "20a3e1d5c9ddf363",
+      "type": "split",
+      "children": [
+        {
+          "id": "00889e4b49c9a92d",
+          "type": "tabs",
+          "children": [
+            {
+              "id": "4da28429160ec0cf",
+              "type": "leaf",
+              "state": {
+                "type": "backlink",
+                "state": {
+                  "file": "java基础.md",
+                  "collapseAll": true,
+                  "extraContext": false,
+                  "sortOrder": "alphabetical",
+                  "showSearch": false,
+                  "searchQuery": "",
+                  "backlinkCollapsed": true,
+                  "unlinkedCollapsed": false
+                }
+              }
+            },
+            {
+              "id": "0969039a37b962bc",
+              "type": "leaf",
+              "state": {
+                "type": "outgoing-link",
+                "state": {
+                  "file": "java基础.md",
+                  "linksCollapsed": false,
+                  "unlinkedCollapsed": true
+                }
+              }
+            },
+            {
+              "id": "055ecf242a6be7ab",
+              "type": "leaf",
+              "state": {
+                "type": "outline",
+                "state": {
+                  "file": "java基础.md"
+                }
+              }
+            },
+            {
+              "id": "42a16d874c2a61a7",
+              "type": "leaf",
+              "state": {
+                "type": "tag",
+                "state": {
+                  "sortOrder": "frequency",
+                  "useHierarchy": true
+                }
+              }
+            }
+          ],
+          "currentTab": 2
+        }
+      ],
+      "direction": "horizontal",
+      "width": 284.5
+    },
+    "left-ribbon": {
+      "hiddenItems": {
+        "switcher:打开快速切换": false,
+        "canvas:Create new canvas": false,
+        "workspaces:管理工作区布局": false,
+        "command-palette:打开命令面板": false
+      }
+    },
+    "active": "59dd3373284367b3"
+  }
+}

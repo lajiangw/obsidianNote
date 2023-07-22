@@ -1,0 +1,21 @@
+{
+	"nodes":[
+		{"type":"text","text":"从机 1","id":"ee90c6861bd062e2","x":-260,"y":-40,"width":100,"height":53},
+		{"type":"text","text":"从机 2","id":"e751c1dda13fb125","x":60,"y":-40,"width":93,"height":60},
+		{"type":"text","text":"从机 4","id":"3119251a7ab861ca","x":-178,"y":78,"width":78,"height":55},
+		{"type":"text","text":"从机 3","id":"a666e75095c4c80f","x":-320,"y":83,"width":80,"height":50},
+		{"type":"text","text":"从机 5","id":"e811b3c7fb34c569","x":19,"y":83,"width":88,"height":54},
+		{"type":"text","text":"从机 6","id":"418e2b1d3681881d","x":180,"y":85,"width":68,"height":50},
+		{"id":"bcf2a73584f54b8c","x":-455,"y":187,"width":135,"height":53,"type":"text","text":"从机 7....\n"},
+		{"type":"text","text":"**主机**","id":"e4d8dd015015999d","x":-100,"y":-180,"width":158,"height":60}
+	],
+	"edges":[
+		{"id":"1328cb79d4d6f26b","fromNode":"e4d8dd015015999d","fromSide":"bottom","toNode":"ee90c6861bd062e2","toSide":"top"},
+		{"id":"0a040b205d995025","fromNode":"e4d8dd015015999d","fromSide":"bottom","toNode":"e751c1dda13fb125","toSide":"top"},
+		{"id":"4db9fc7dac3fbbb7","fromNode":"e751c1dda13fb125","fromSide":"bottom","toNode":"e811b3c7fb34c569","toSide":"top"},
+		{"id":"10d4b4035ccf93c7","fromNode":"e751c1dda13fb125","fromSide":"bottom","toNode":"418e2b1d3681881d","toSide":"top"},
+		{"id":"a537616dc54a4b06","fromNode":"ee90c6861bd062e2","fromSide":"bottom","toNode":"a666e75095c4c80f","toSide":"top"},
+		{"id":"c13c949f4275a338","fromNode":"ee90c6861bd062e2","fromSide":"bottom","toNode":"3119251a7ab861ca","toSide":"top"},
+		{"id":"ce0b8b69caf303f0","fromNode":"a666e75095c4c80f","fromSide":"bottom","toNode":"bcf2a73584f54b8c","toSide":"top"}
+	]
+}

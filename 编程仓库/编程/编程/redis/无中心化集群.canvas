@@ -1,0 +1,21 @@
+{
+	"nodes":[
+		{"type":"text","text":"B订单服务器","id":"4c7cc96c2e8add66","x":148,"y":-202,"width":112,"height":62},
+		{"type":"text","text":"C用户服务器","id":"968b72656a6b99a1","x":320,"y":46,"width":100,"height":50},
+		{"type":"text","text":"A商品服务器","id":"0930f7eca1fb23dc","x":-102,"y":56,"width":122,"height":60},
+		{"type":"text","text":"查询用户请求","id":"581fc9a5e0a2558a","x":-500,"y":56,"width":120,"height":50},
+		{"type":"text","text":"当想 reids 发送一条查询用户请求，reids 无主机集群模式，每台服务器都是连通的，当 A 服务器没有该权限时，就会发送给 B 处理，B 不能处理就发送给 C 去处理。","id":"99a9fad96a472f3b","x":-180,"y":220,"width":440,"height":120},
+		{"type":"text","text":"从机","id":"79ac9f6ccec18141","x":152,"y":-280,"width":105,"height":50},
+		{"type":"text","text":"从机","id":"ed2fe56b9452ebeb","x":-93,"y":-15,"width":105,"height":50},
+		{"type":"text","text":"从机","id":"d228f1af9672731c","x":318,"y":-40,"width":105,"height":50}
+	],
+	"edges":[
+		{"id":"6385df12a2c20319","fromNode":"581fc9a5e0a2558a","fromSide":"right","toNode":"0930f7eca1fb23dc","toSide":"left"},
+		{"id":"c8f48190ae9e9465","fromNode":"0930f7eca1fb23dc","fromSide":"right","toNode":"4c7cc96c2e8add66","toSide":"left"},
+		{"id":"85e7c61f49601320","fromNode":"4c7cc96c2e8add66","fromSide":"right","toNode":"968b72656a6b99a1","toSide":"right"},
+		{"id":"eee2cd6cb935280b","fromNode":"968b72656a6b99a1","fromSide":"left","toNode":"0930f7eca1fb23dc","toSide":"right"},
+		{"id":"7e7e6ffabeabfe42","fromNode":"0930f7eca1fb23dc","fromSide":"top","toNode":"ed2fe56b9452ebeb","toSide":"bottom"},
+		{"id":"db43f2625765a0b9","fromNode":"4c7cc96c2e8add66","fromSide":"top","toNode":"79ac9f6ccec18141","toSide":"bottom"},
+		{"id":"0d2b3ef613db7850","fromNode":"968b72656a6b99a1","fromSide":"top","toNode":"d228f1af9672731c","toSide":"bottom"}
+	]
+}

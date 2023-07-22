@@ -1,0 +1,14 @@
+{
+	"nodes":[
+		{"id":"17ad00b478cfd1ba","x":-300,"y":-300,"width":620,"height":440,"type":"text","text":"NameSpace"},
+		{"id":"da4957f256ba9acb","x":-242,"y":-240,"width":505,"height":360,"color":"2","type":"text","text":"Group"},
+		{"id":"4c0e15f4ad18292b","x":-200,"y":-180,"width":420,"height":260,"color":"4","type":"text","text":"Service\n\n"},
+		{"id":"59b0f211f60270b7","x":100,"y":-120,"width":100,"height":150,"type":"text","text":"Cluster 2"},
+		{"id":"1624e171ded02143","x":-160,"y":-120,"width":100,"height":150,"type":"text","text":"Cluster 1"}
+	],
+	"edges":[
+		{"id":"9be54bb236abd848","fromNode":"4c0e15f4ad18292b","fromSide":"left","toNode":"da4957f256ba9acb","toSide":"left"},
+		{"id":"a743b1e40e9e8ce1","fromNode":"1624e171ded02143","fromSide":"top","toNode":"4c0e15f4ad18292b","toSide":"top"},
+		{"id":"173e734a5bca1a0d","fromNode":"1624e171ded02143","fromSide":"top","toNode":"4c0e15f4ad18292b","toSide":"left"}
+	]
+}

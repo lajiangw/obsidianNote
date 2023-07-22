@@ -1,0 +1,28 @@
+{
+  "promptDelete": false,
+  "livePreview": true,
+  "showFrontmatter": false,
+  "showLineNumber": false,
+  "spellcheck": true,
+  "spellcheckLanguages": null,
+  "tabSize": 4,
+  "vimMode": false,
+  "legacyEditor": false,
+  "attachmentFolderPath": "./imgs",
+  "newFileLocation": "folder",
+  "newFileFolderPath": "新建的笔记",
+  "alwaysUpdateLinks": true,
+  "strictLineBreaks": false,
+  "rightToLeft": false,
+  "pdfExportSettings": {
+    "includeName": false,
+    "pageSize": "Letter",
+    "landscape": false,
+    "margin": "0",
+    "downscalePercent": 100
+  },
+  "showIndentGuide": true,
+  "useMarkdownLinks": true,
+  "newLinkFormat": "relative",
+  "defaultViewMode": "preview"
+}

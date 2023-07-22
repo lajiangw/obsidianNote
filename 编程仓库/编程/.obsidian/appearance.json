@@ -1,0 +1,18 @@
+{
+  "accentColor": "",
+  "theme": "moonstone",
+  "cssTheme": "Things",
+  "baseFontSize": 18,
+  "translucency": false,
+  "monospaceFontFamily": "JetBrains Mono NL",
+  "enabledCssSnippets": [
+    "预览模式优化-空白行-行间距",
+    "extended-colorschemes",
+    "表格优化",
+    "AnuExtendTheme",
+    "yaozhuwa@CSS"
+  ],
+  "nativeMenus": false,
+  "textFontFamily": "苹方,微软雅黑",
+  "interfaceFontFamily": "苹方"
+}

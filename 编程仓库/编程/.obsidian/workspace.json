@@ -1,0 +1,215 @@
+{
+  "main": {
+    "id": "1aeafd60d880a90d",
+    "type": "split",
+    "children": [
+      {
+        "id": "ce76c5f97a633fc9",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "0e36b12788ff5148",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "编程/java相关/JUC并发/JUC并发编程.md",
+                "mode": "source",
+                "backlinks": false,
+                "source": false
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "27b666fb1318e967",
+    "type": "split",
+    "children": [
+      {
+        "id": "96e1aec0d0c3f8ba",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "49b768fa898baa8d",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical"
+              }
+            }
+          },
+          {
+            "id": "92c339ff8da77b57",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": true,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              }
+            }
+          },
+          {
+            "id": "8cc8b915e9a749ac",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {}
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 233.51103591918945
+  },
+  "right": {
+    "id": "20a3e1d5c9ddf363",
+    "type": "split",
+    "children": [
+      {
+        "id": "00889e4b49c9a92d",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "4da28429160ec0cf",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "编程/java相关/JUC并发/JUC并发编程.md",
+                "collapseAll": true,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": false
+              }
+            }
+          },
+          {
+            "id": "0969039a37b962bc",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "编程/java相关/JUC并发/JUC并发编程.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              }
+            }
+          },
+          {
+            "id": "055ecf242a6be7ab",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "编程/java相关/JUC并发/JUC并发编程.md"
+              }
+            }
+          },
+          {
+            "id": "6e4ee22ff48b983c",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": false
+              }
+            }
+          },
+          {
+            "id": "672fa432e77b87e6",
+            "type": "leaf",
+            "state": {
+              "type": "advanced-tables-toolbar",
+              "state": {}
+            }
+          }
+        ],
+        "currentTab": 2
+      }
+    ],
+    "direction": "horizontal",
+    "width": 319.5
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "canvas:新建白板": false,
+      "command-palette:打开命令面板": false,
+      "switcher:打开快速切换": false,
+      "graph:查看关系图谱": false,
+      "daily-notes:打开/创建今天的日记": false,
+      "zk-prefixer:创建时间戳笔记": false,
+      "table-editor-obsidian:Advanced Tables Toolbar": false
+    }
+  },
+  "active": "0e36b12788ff5148",
+  "lastOpenFiles": [
+    "编程/java相关/JUC并发/imgs/Pasted image 20230722204653.png",
+    "编程/java相关/JUC并发/imgs/Pasted image 20230722204457.png",
+    "学习路程.md",
+    "编程/java相关/JUC并发/JUC并发编程.md",
+    "编程/java相关/JUC并发/imgs/Pasted image 20230722202029.png",
+    "编程/java相关/JUC并发/imgs/Pasted image 20230722185259.png",
+    "编程/java相关/JUC并发/imgs/Pasted image 20230722165052.png",
+    "编程/java相关/JUC并发/imgs/Pasted image 20230722165036.png",
+    "编程/java相关/JUC并发/imgs/Pasted image 20230722150829.png",
+    "编程/java相关/JUC并发/imgs/Pasted image 20230722150736.png",
+    "编程/java相关/JUC并发/imgs/Pasted image 20230722145223.png",
+    "编程/java相关/JUC并发/imgs/Pasted image 20230722145019.png",
+    "编程/java相关/JUC并发/imgs/Pasted image 20230722114446.png",
+    "面试/简历/简历.md",
+    "双链使用教程/双链.md",
+    "编程/Git/Git.md",
+    "遇到的问题/问题总结.md",
+    "未命名.md",
+    "未命名",
+    "编程/java相关/idea配置/idea插件配置.md",
+    "编程/java相关/JUC并发/imgs",
+    "项目总结/尚上优选/尚上优选.md",
+    "编程/java相关/JUC并发/未命名",
+    "编程/java相关/JUC并发",
+    "编程/Linux/Linux.md",
+    "编程/java相关/SpringCloud/SpringCloud.md",
+    "面试/简历",
+    "编程/redis/redis.md",
+    "编程/java相关/函数式编程/函数式编程.md",
+    "编程/RabbitMQ/MQ.md",
+    "遇到的问题",
+    "宝塔.md",
+    "未命名.canvas",
+    "编程/软件测试大赛.md",
+    "编程/Nginx/Nginx.md",
+    "编程/java相关/Spring Boot/SpringBoot.md",
+    "项目总结/尚上优选/尚上优选我.md",
+    "编程/java相关/SpringCloud/包含关系.canvas",
+    "项目总结/尚上优选",
+    "项目总结/项目",
+    "项目总结",
+    "编程/java相关/SpringCloud/imgs/mysql-connector-java-8.0.29.jar",
+    "日记/2023-07-02-19时17.md",
+    "编程/java相关/Collection/Collection 类关系图.md",
+    "日记/2023-06-29-20时22.md",
+    "日记/2023-04-15.md",
+    "日记/2023-03-15.md",
+    "日记/2023-01-27.md",
+    "编程/redis/薪火相传.canvas",
+    "编程/redis/has对应方式.canvas",
+    "编程/redis/无中心化集群.canvas",
+    "未命名 3.canvas",
+    "未命名 2.canvas"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+	"nodes":[
+		{"type":"text","text":"Username      root\nPassword       123","id":"58038e3e7a37639e","x":60,"y":-140,"width":250,"height":140,"color":"2"},
+		{"type":"text","text":"User ","id":"4d5a8707b001835b","x":-440,"y":-130,"width":250,"height":60,"color":"1"}
+	],
+	"edges":[
+		{"id":"e26d917782cd3c7e","fromNode":"4d5a8707b001835b","fromSide":"right","toNode":"58038e3e7a37639e","toSide":"left"}
+	]
+}
