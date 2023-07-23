@@ -1188,9 +1188,585 @@ JMM 定义了线程和主内存之间的抽象关系：
 	- 不同线程之间也无法直接访问其他线程的工作内存中的变量，线程间变量值的传递需要通过主内存来进行（同级不能互相访问）。
 
 # JMM 规范下多线程先行发生原则之 happens-before
+在 JVM 中，如果一个操作执行的结果需要对另一个操作可见或者代码重排序，那么这两个操作之间必须存在 happens-before（先行发生）原则，逻辑上的先后关系。
+# x, y 案例说明
+
+| x=5                | 线程 A 执行 |
+| ------------------ | ----------- |
+| y=x                | 线程 B 执行 |
+| 上述称之为：写后读 |             |
+
+问题？
+
+y 是否等于5呢？
+如果线程A的操作（x=5）happens-before（先行发生）线程B的操作(y=x)，那么可以确定线程B执行y=5一定成立；
+如果他们不存在happens-before原则，那么y=5不一定成立
+这就是 happens-before 原则的为例----------->**包含可见性和有序性的约束**
+
+## 先行并发原则说明
+如果 Java 内存模型中所有的有序性都仅靠 volatile 和 synchronized 来完成，那么有很多操作都将变得非常罗嗦，但是我们在编写 Java 并发代码的时候并没有察觉到这一点。
+
+我们没有时时、处处、次次，添加 `volatile` 和 `synchronized` 来完成程序，这是因为 Java 语言中 JMM 原则下，**有一个“先行发生”（happens-before）的原则限制**和规矩，给你理好了规矩！ 
+
+这个原则非常重要：**它是判断数据是否存在竞争，线程是否安全的非常有用的手段**。依赖这个原则，我们可以通过几条简单规则一揽子解决并发环境下两个操作之间是否可能存在冲突的所有问题，而不需要陷入 Java 内存模型晦涩难懂的底层编译原理之中。 
+## happens -before 总原则
+- 如果一个操作 happens-before 另一个操作，那么**第一个操作的执行结果将对第二个操作可见**，而且**第一个操作的执行顺序排在第二个操作之前** 
+- 
+- 如果两个操作之间存在 happens-before 关系，并不意味着一定要按照 happens-before 原则制定的顺序来执行。如果重排之后的执行结果与按照 happens-before 关系来执行的**结果一致**，那么这种重排序**并不非法**。 
+
+## happens -before 之8条
+从 JDK 5开始，Java 使用新的 JSR-133内存模型，提供了 happens-before 原则来辅助保证程序执行的原子性、可见性以及有序性的问题，它是判断数据是否存在竞争、线程是否安全的依据，happens-before 原则内容如下：
+
+1. 次序规则：**一个线程内**，按照代码的顺序，**写在前面的操作先行发生于写在后面的操作**，也就是说前一个操作的结果可以被后续的操作获取（保证语义串行性，按照代码顺序执行）。比如前一个操作把变量x赋值为1，那后面一个操作肯定能知道x已经变成了1
+2. 锁定规则：一个 unLock 操作先行发生于后面对同一个锁的 lock 操作（后面指时间上的先后）。只有释放了的锁，才能获得锁。
+3. volatile变量规则：对一个volatile变量的写操作先行发生于后面对这个变量的读操作，前面的写对后面的读是**可见的**，这里的后面同样**指时间上的先后**
+4. 传递规则：如果操作A先行发生于操作B，而操作B又先行发生于操作C，**则可以得出操作A先行发生于操作C。**
+5. 线程启动规则（Thread start Rule）：`Thread` 对象的` start ()` 方法先行发生于此线程的每一个动作
+6. 线程中断规则（Thread Interruption Rule）：
+	1. 对线程 `interrupt ()` 方法的调用**先行发生于被中断线程的代码检测**到中断事件的发生
+	2. 可以通过` Thread.interrupted ()`检测到是否发生中断 
+	3. **也就是说你要先调用 interrupt ()方法设置过中断标志位，我才能检测到中断发生** 
+
+7. 线程终止规则（Thread Termination Rule）：线程中的**所有操作都优先发生于对此线程的终止检测**，我们可以通过 isAlive ()等手段检测线程是否已经终止执行。  
+9. 对象终结规则（Finalizer Rule）：一个对象的初始化完成（构造函数执行结束）先行发生于它的 finalize (）方法的开始------->对象没有完成初始化之前，是不能调用 finalized ()方法的, (finalize ()垃圾回收方法)
+
+## happens -before 小总结
+- 在 Java 语言里面，Happens-before 的语义本质上是一种可见性
+- A happens-before B ,意味着A发生过的事情对B而言是可见的，无论A事件和B事件是否发生在同一线程里
+- JVM的设计分为两部分：
+	
+	- 一部分是面向我们程序员提供的，也就是happens-before规则，它通俗易懂的向我们程序员阐述了一个强内存模型，我们只要理解happens-before规则，就可以编写并发安全的程序了
+	- 另一部分是针对JVM实现的，为了尽可能少的对编译器和处理器做约束从而提升性能，JMM在不影响程序执行结果的前提下对其不做要求，即允许优化重排序，我们只要关注前者就好了，也就是理解happens-before规则即可，其他繁杂的内容由JMM规范结合操作系统给我们搞定，我们只写好代码即可。
 
 
+### 案例说明
+```java
+private int value =0;
+public int getValue(){
+    return value;
+}
+public int setValue(){
+    return ++value;
+}
+```
+问题描述：假设存在线程 A 和 B，线程 A 先（时间上的先后）调用了 setValue ()方法，然后线程 B 调用了同一个对象的 getValue ()方法，那么线程 B 收到的返回值是什么？ 
+答案：不一定
+分析 happens-before 规则（规则5，6，7，8可以忽略，和代码无关）
+	1 由于两个方法由不同线程调用，不满足一个线程的条件，不满足程序次序规则
+	2 两个方法都没有用锁，不满足锁定规则
+	3 变量没有使用volatile修饰，所以不满足volatile变量规则
+	4 传递规则肯定不满足
+综上：无法通过 happens-before 原则推导出线程 A happens-before 线程 B，虽然可以确定时间上线程 A 优于线程 B，但就是无法确定线程 B 获得的结果是什么，所以这段代码不是线程安全的
+
+注意：
+- 如果两个操作的执行次序无法从 happens-before 原则推导出来，那么就不能保证他们的有序性，虚拟机可以随意对他们进行重排序
+
+如何修复？
+- 把getter/setter方法都定义为synchronized方法------->不好，重量锁，并发性下降
+```java
+private int value =0;
+public synchronized int getValue(){
+    return value;
+}
+public synchronized int setValue(){
+    return ++value;
+}
+```
+
+- 把 Value 定义为 volatile 变量，由于 setter 方法对 value 的修改不依赖 value 的原值，满足 volatile 关键字使用场景
+```java
+/**
+* 利用volatile保证读取操作的可见性，
+* 利用synchronized保证符合操作的原子性结合使用锁和volatile变量来减少同步的开销
+*/
+private volatile int value =0;
+public int getValue(){
+    return value;
+}
+public synchronized int setValue(){
+    return ++value;
+}
+```
 
 
+# volatile 与 JMM
+## 被 volatile 修饰的变量有两大特点
+- 特点：
+	
+	- 可见性
+	- 有序性：有排序要求，有时需要禁重排
 
+- 内存语义：
+	
+	- 当写一个volatile变量时，JMM会把该线程对应的**本地内存中的共享变量值立即刷新回主内存中**
+	- 当读一个volatile变量时，JMM会把该线程对应的本地内存设置为无效，**重新回到主内存中读取最新共享变量的值**
+	- 所以volatile的写内存语义是**直接刷新到主内存中**，读的内存语义是**直接从主内存中读取**
+
+- volatile凭什么可以保证可见性和有序性？
+	- 因为内存屏障 Memory Barrier
+
+## 内存屏障 （面试重点必须拿下） #面试题 
+- vilatile 两大特性：
+	
+	- **可见**：写完后立即刷新回主内存并及时发出通知，大家可以去主内存拿最新版，前面的修改对后面所有线程可见
+	- **有序性（禁重排）**：
+	- 重排序是指编译器和处理器为了优化程序性能而对指令序列进行重新排序的一种手段，有时候会改变程序语句的先后顺序，若不存在数据依赖关系，可以重排序；存在数据依赖关系，禁止重排序；但重排后的指令绝对不能改变原有的串行语义！这点在并发设计中必须要重点考虑！
+
+内存屏障（也称内存栅栏，屏障指令等）是一类同步屏障指令，是 CPU 或编译器在对内存随机访问的操作中的一个同步点，使得此点之前的**所有读写操作都执行后才可以开始执行此点之后的操作，避免代码重排序**。内存屏障其实就是一种 JVM 指令，Java 内存模型的重排规则会要求 Java 编译器在生成 JVM 指令时插入特定的内存屏障指令，通过这些内存屏障指令，volatile 实现了 Java 内存模型中的可见性和有序性（禁重排），**但 volatile 无法保证原子性**
+
+- 内存屏障之前的所有**写操作都要回写到主内存**
+- 内存屏障之后的所有**读操作都能获得内存屏障之前的所有写操作的最新结果**（实现了可见性）
+
+写屏障 (Store Memory Barrier)：告诉处理器在写屏障之前将所有存储在缓存 (store buffers)中的数据同步到主内存，也就是说当看到 `Store` 屏障指令，就必须把该指令之前的所有写入指令执行完毕才能继续往下执行
+
+读屏障 (Load Memory Barrier)：处理器在读屏障之后的读操作，都在读屏障之后执行。也就是说在 `Load` 屏障指令之后就能够保证后面的读取数据指令一定能够读取到最新的数据。 
+
+因此重排序时，不允许把内存屏障之后的指令重排序到内存屏障之前。一句话：**对一个 volatile 变量的写，先行发生于任意后续对这个 volatile 变量的读，也叫写后读。**
+
+## 内存屏障分类
+
+粗分两种：
+	- 读屏障（Load Barrier）：在读指令之前插入读屏障，让工作内存或 CPU 高速缓存当中的缓存数据失效，重新回到主内存中获取最新数据。
+	- 写屏障（Store Barrier）：在写指令之后插入写屏障，强制把缓冲区的数据刷回到主内存中。
+
+细分四种：
+![](imgs/Pasted%20image%2020230723131750.png)
+
+用自己的理解：内存屏障是多线程对于代码重排序中的一种限制和规则。切线程必须遵守此规则。
+
+
+- 什么叫保证有序性？----->通过内存屏障禁重排
+	
+	- 重排序有可能影响程序的执行和实现，因此，我们有时候希望告诉JVM别自动重排序，我这里不需要重排序，一切听我的。
+	- 对于编译器的重排序，JMM 会根据重排序的规则，禁止特定类型的编译器重排序。
+	- 对于处理器的重排序，**Java 编译器在生成指令序列的适当位置，插入内存屏障指令，来禁止特定类型的处理器排序。**
+
+- happens-before 之 volatile 变量规则
+
+![](imgs/Pasted%20image%2020230723132923.png)
+
+当第一个操作为 volatile 读时，不论第二个操作是什么，都不能重排序，这个操作保证了
+volatile 读之后的操作不会被重排到 volatile 读之前。
+
+当第一个操作为 volatile 写时，第二个操作为 volatile 读时，不能重排
+
+当第二个操作为 volatile 写时，不论第一个操作是什么，都不能重排序，这个操作保证了 volatile 写之前的操作不会被重排到 volatile 写之后。
+
+- JMM 就将内存屏障插入策略分为4种规则
+	- 读屏障：在每个 volatile 读操作的**后面**插入一个 LoadLoad 屏障或者 LoadStore 屏障
+	- ![](imgs/Pasted%20image%2020230723133048.png)
+	- - 写屏障：在每个 volatile 写操作的**前面**插入 StoreStore 屏障；在每个 volatile 写操作的**后面**插入 StoreLoad 屏障；
+	- ![](imgs/Pasted%20image%2020230723133612.png)
+
+
+## volatile 特性保证可见性
+**保证不同线程对某个变量完成操作后结果及时可见，即该共享变量一旦改变所有线程立即可见**
+
+- Code
+	
+	- 不加volatile，没有可见性，程序无法停止
+	- 加了 volatile，保证可见性，程序可以停止
+
+```java
+public class VolatileSeeTest {  
+  
+static volatile boolean flag = true;  
+  
+public static void main(String[] args) throws InterruptedException {  
+  
+new Thread(() -> {  
+System.out.println("t1 进入");  
+while (flag) {  
+  
+}  
+System.out.println("程序终止！");  
+}).start();  
+  
+// 即时休眠1秒之后修改flag的值，该值也会影响到另外一个下城，加了volatile关键字的变量是全线程可见的。  
+TimeUnit.SECONDS.sleep(1);  
+flag = false;  
+System.out.println("falg = " + flag);  
+}  
+}
+```
+
+- volatile 变量的读写过程（了解即可）
+![](imgs/Pasted%20image%2020230723143034.png)
+前六部在多线程和单个线程下都没有问题，为了防止在多线程下的写操作出现问题，有了后面两步操作，加锁和解锁。
+
+
+## volatile 变量的符合操作不具有原子性
+volatile变量的符合操作不具有原子性
+	- 对于 voaltile 变量具备可见性，JVM 只是保证**从主内存加载到线程工作内存的值是最新的**，也仅仅是数据加载时是最新的。但是多线程环境下，“数据计算”和“数据赋值”操作可能多次出现，若数据在加载之后，若主内存 volatile 修饰变量发生修改之后，线程工作内存的操作将会作废去读主内存最新值，**操作出现写丢失问题**。即**各线程私有内存和主内存公共内存中变量不同步**，进而导致数据不一致。由此可见 volatile 解决的是变量读时的可见性问题，但无法保证原子性，对于**多线程修改主内存共享变量的场景必须加锁同步。** 
+	- 至于怎么去理解这个写丢失的问题，就是再将数据读取到本地内存到写回主内存中有三个步骤：**数据加载---->数据计算---->数据赋值**，如果第二个线程在第一个线程读取旧值与写回新值期间读取共享变量的值，那么第二个线程将会与第一个线程一起看到同一个值，并执行自己的操作，一旦其中一个线程对 volatile 修饰的变量先行完成操作刷回主内存后，另一个线程会作废自己的操作，然后重新去读取最新的值再进行操作，这样的话，它自身的那一次操作就丢失了，这就造成了线程安全失败，因此，这个问题需要使用 `synchronized` 修饰以保证线程安全性。 
+	- 结论：**volatile 变量不适合参与到依赖当前值的运算，如 i++，i=i+1之类的，通常用来保存某个状态的 boolean 值或者 int 值**，也正是由于 volatile 变量只能保证可见性，在不符合以下规则的运算场景中，
+
+- 我们仍然要通过加锁来保证原子性： 
+	
+	- 运算结果并不依赖变量的当前值，或者能够确保只有单一的线程修改变量的值。
+	- 变量不需要与其他的状态变量共同参与不变约束。
+	
+	- 面试回答为什么不具备原子性：举例i++的例子，在字节码文件中，i++分为三部，间隙期间不同步非原子操作
+	
+	- **对于volatile变量，JVM只是保证从主内存加载到线程工作内存的值是最新的，也就是数据加载时是最新的，如果第二个线程在第一个线程读取旧值和写回新值期间读取i的域值，也就造成了线程安全问题。**
+- ![](https://cdn.nlark.com/yuque/0/2023/png/35653686/1681275465892-ca223f7f-6078-409a-95fa-02613915ab71.png)
+
+## 6.3.3 指令禁重排
+
+volatile 实现禁止重拍序的底层是内存屏障。
+	- 在每一个 volatile 写操作前面插入一个 StoreStore 屏障--->StoreStore 屏障可以保证在 volatile 写之前，其前面所有的普通写操作都已经刷新到主内存中。
+	- 在每一个volatile写操作后面插入一个StoreLoad屏障--->StoreLoad屏障的作用是避免volatile写与后面可能有的volatile读/写操作重排序
+	- 在每一个volatile读操作后面插入一个LoadLoad屏障--->LoadLoad屏障用来禁止处理器把上面的volatile读与下面的普通读重排序
+	- 在每一个 volatile 读操作后面插入一个 LoadStore 屏障--->LoadTore 屏障用来禁止处理器把上面的 volatile 读与下面的普通写重排序
+
+- 案例说明（volatile 读写前或后加了屏障保证有序性）：
+![](imgs/Pasted%20image%2020230723151104.png)
+
+![](imgs/Pasted%20image%2020230723151114.png)
+
+## 如何正确使用 volatile
+- 单一赋值可以，但是含复合运算赋值不可以（i++之类的）
+	- - volatile int a = 10;
+	- volatile boolean flag = true;
+
+- 状态标志，判断业务是否结束
+	- 作为一个布尔状态标志，用于指示发生了一个重要的一次性事件，例如完成初始化或任务结束
+	- ![](imgs/Pasted%20image%2020230723151220.png)
+
+- 开销较低的读，写锁策略
+	
+	- 当读远多于写，结合使用内部锁和volatile变量来减少同步的开销
+	- 原理是：利用volatile保证读操作的可见性，利用synchronized保证符合操作的原子性
+	- ![](https://cdn.nlark.com/yuque/0/2023/png/35653686/1681277613302-5adef887-27ed-449c-bd88-0e4f4e6b56bf.png)
+
+- DCL双端锁的发布
+	
+	- 问题描述：首先设定一个加锁的单例模式场景
+	- ![](https://cdn.nlark.com/yuque/0/2023/png/35653686/1681277769628-287b69ba-cc2f-4a20-b193-d255570d5dfa.png)
+	
+	- 在单线程环境下（或者说正常情况下），在“问题代码处”，会执行以下操作，保证能获取到已完成初始化的实例：
+	- ![](https://cdn.nlark.com/yuque/0/2023/png/35653686/1681277858260-07127c5a-8bb5-4af3-a253-149085d4b849.png)
+	- 隐患：在多线程环境下，在“问题代码处”，会执行以下操作，由于重排序导致2，3乱序，后果就是其他线程得到的是null而不是完成初始化的对象，其中第3步中实例化分多步执行（分配内存空间、初始化对象、将对象指向分配的内存空间），某些编译器为了性能原因，会将第二步和第三步重排序，这样某个线程肯能会获得一个未完全初始化的实例：
+	- ![](https://cdn.nlark.com/yuque/0/2023/png/35653686/1681277949781-4b436fdd-4cac-43b9-9089-0dfa91f4d812.png)
+	
+	- 多线程下的解决方案：加volatile修饰
+		- ![](https://cdn.nlark.com/yuque/0/2023/png/35653686/1681278158734-fe21f869-71b1-4b80-a457-011b7b1832b0.png)
+
+## 6.5 本章最后的小总结
+
+![](imgs/Pasted%20image%2020230723154302.png)
+
+## olatile 没有原子性
+
+## 6.5.3 volatile禁重排
+
+![](https://cdn.nlark.com/yuque/0/2023/png/35653686/1681278663255-cf8b4fec-7ef4-4fc5-a9b4-5e517b7a9a6e.png)
+
+![](https://cdn.nlark.com/yuque/0/2023/png/35653686/1681278816338-75242ddd-9ac6-412d-9437-b5b62b147311.png)
+
+## 6.5.4 凭什么我们Java写了一个volatile关键字，系统底层加入内存屏障？两者的关系如何勾搭？
+
+![](https://cdn.nlark.com/yuque/0/2023/png/35653686/1681278867074-b0a21e10-d868-4dd1-a7d2-536d2b2010a0.png)
+
+## 6.5.5 内存屏障是什么？
+
+是一种屏障指令，它使得CPU或编译器对屏障指令的前和后所发出的内存操作执行一个排序的约束。也称为内存栅栏或栅栏指令。
+
+## 6.5.6 内存屏障能干吗？
+
+- 阻止屏障两边的指令重排序
+- 写操作时加入屏障，强制将线程私有工作内存的数据刷回主物理内存
+- 读操作时加入屏障，线程私有工作内存的数据失效，重新回到主物理内存中获取最新值
+
+## 6.5.7 内存屏障四大指令
+
+![](https://cdn.nlark.com/yuque/0/2023/png/35653686/1681279106353-e2d0f17f-32e0-41d3-b1af-4eeaa4016f6b.png)
+
+## 6.5.8 3句话总结
+
+- volatile写之前的操作，都禁止重排序到volatile之后
+- volatile读之后的操作，都禁止重排序到volatile之前
+- volatile 写之后 volatile 读，禁止重排序
+
+# CAS
+## 原子类
+Java. util. concurrent. atomic
+![](imgs/Pasted%20image%2020230723155106.png)
+
+## CAS 
+没有 CAS 时：
+多线程环境中不使用原子类保证线程安全 i++（基本数据类型）
+
+```java
+class Test {
+        private volatile int count = 0;
+        //若要线程安全执行执行count++，需要加锁
+        public synchronized void increment() {
+                  count++;
+        }
+
+        public int getCount() {
+                  return count;
+        }
+}
+```
+
+使用 CAS：
+多线程环境中使用原子类保证线程安全 i++（基本数据类型）---------->类似于乐观锁
+```java
+class Test2 {
+        private AtomicInteger count = new AtomicInteger();
+
+        public void increment() {
+                  count.incrementAndGet();
+        }
+      //使用AtomicInteger之后，不需要加锁，也可以实现线程安全。
+       public int getCount() {
+                return count.get();
+        }
+}
+```
+
+
+CAS (compare and swap)，中文翻译为比较并交换，实现并发算法时常用到的一种技术，用于保证共享变量的**原子性更新**，它包含三个操作数---内存位置、预期原值与更新值。
+
+执行 CAS 操作的时候，将内存位置的值与预期原值进行比较：
+	- 如果相匹配，那么处理器会自动将该位置更新为新值
+	- 如果不匹配，处理器不做任何操作，多个线程同时执行CAS操作只有一个会成功。
+
+![](https://cdn.nlark.com/yuque/0/2023/png/35653686/1681279948065-f7d04f1d-7cd7-43b3-8786-693a1d016f84.png)
+
+CASDemo:
+```java
+/**  
+* @author ZhangMinlei  
+* @description  
+* @date 2023-07-23 17:09  
+*/  
+public class CasTest {  
+public static void main(String[] args) {  
+// AtomicInteger构造器传入的参数为初始值，  
+AtomicInteger atomicInteger = new AtomicInteger(5);  
+// compareAndSet会拿 expect 参数和 初始值比较（5） 如果相等，说明没有修改过，将值修改为10 也就是 update参数的值，  
+// 如果不相等，不作操作  
+atomicInteger.compareAndSet(0,10);  
+System.out.println(atomicInteger.get());  
+}  
+}
+```
+
+底层源码解析
+![](imgs/uTools_1690103813443.png)
+
+## CAS 底层原理 ？谈谈对 Unsafe 类的理解？
+`Unsafe` 类是 CAS 的核心类，由于 Java 方法无法直接访问底层系统，需要通过本地（native）方法来访问，Unsafe 相当于一个后门，基于该类可以直接操作特定内存的数据。Unsafe 类存在于 sun. misc 包中，其内部方法操作可以像 C 的指针一样直接操作内存，因此 Java 中 CAS 操作的执行依赖于 Unsafe 类的方法。
+
+注意：Unsafe类中的所有方法都是native修饰的，也就是说Unsafe类中的所有方法都直接调用操作系统底层资源执行相应任务。
+
+问题：我们知道i++是线程不安全的，那AtomicInteger.getAndIncrement()如何保证原子性？
+
+AtomicInteger类主要利用CAS+volatile和native方法来保证原子操作，从而避免synchronized的高开销，执行效率大为提升：
+![](https://cdn.nlark.com/yuque/0/2023/png/35653686/1681281445135-332ae9b5-ae46-4021-a7ea-237b1f37b927.png)
+
+CAS 并发原语体现在 Java 语言中就是 sun. misc. Unsafe 类中的各个方法。调用 Unsafe 类中的 CAS 方法，JVM 会帮我们实现出 CAS **汇编指令**。**这是一种完全依赖于硬件的功能，通过它实现了原子操作**。再次强调，由于 CAS 是一种系统原语，原语属于**操作系统用语范畴**，是由**若干条指令**组成的，用于完成某个功能的一个过程，并且**原语的执行必须是连续的**，在执行过程中**不允许被中断**，也就是说 **CAS 是一条 CPU 的原子指令**，不会造成所谓的数据不一致问题。 
+
+### 源码分析
+![](imgs/Pasted%20image%2020230723173401.png)
+
+### 底层汇编
+
+![](imgs/Pasted%20image%2020230723173415.png)
+JDK 提供的 CAS 机制，在汇编层级会禁止变量两侧的指令优化，然后使用 compxchg 指令比较并更新变量值（原子性）
+总结：
+	- CAS是靠硬件实现的从而在硬件层面提升效率，最底层还是交给硬件来保证原子性和可见性
+	- 实现方式是基于硬件平台的汇编指令，在inter的CPU中，使用的是汇编指令compxchg指令
+	- 核心思想就是比较要更新变量 V 的值和预期值 E，相等才会将 V 的值设为新值 N，如果不相等自旋再来
+
+
+## 原子引用
+![](imgs/Pasted%20image%2020230723182017.png)
+讲一个对象，封装为原子对象，可以使用 cas 的方法。
+
+使用演示
+```java
+@Test  
+public void atomicReferenceTest() {  
+User user1 = new User("张三", 12);  
+User user2 = new User("李四", 15);  
+// 创建一个存放user 的原子容器  
+AtomicReference<User> userAtomicReference = new AtomicReference<>();  
+// 将user1 这个对象设置进去  
+userAtomicReference.set(user1);  
+// 比较默认值是否为user1 ，如果是 就修改为user2，反之没有操作。  
+System.out.println(userAtomicReference.compareAndSet(user1, user2) + userAtomicReference.get().toString());  
+System.out.println(userAtomicReference.compareAndSet(user1, user2) + userAtomicReference.get().toString());  
+}  
+}  
+  
+@Data  
+@NoArgsConstructor  
+@AllArgsConstructor  
+class User {  
+private String name;  
+private Integer age;  
+}
+```
+
+## CAS 与自旋锁，借鉴 CAS 思想
+自旋锁：
+	CAS 是实现自旋锁的基础，CAS 利用 CPU 指令保证了操作的原子性，以达到锁的效果，至于自旋锁---字面意思自己旋转。**是指尝试获取锁的线程不会立即阻塞，而是采用循环的方式去尝试获取锁**，当线程发现锁被占用时，**会不断循环判断锁的状态**，直到获取。这样的好处是减少线程上下文切换的消耗，缺点是循环会**消耗 CPU**。 
+
+## 自己实现一个自旋锁 spinLockDemo
+
+题目：实现一个自旋锁，借鉴 CAS 思想
+通过 CAS 完成自旋锁，A 线程先进来调用 myLock 方法自己持有锁5秒钟，B 随后进来后发现当前有线程持有锁，所以只能通过自旋等待，直到 A 释放锁后 B 随后抢到。
+
+当线程 A 上锁之后，会占用锁 5 秒，此时线程 B 启动，因为此时的默认值不是 `null`，线程 B 会在 while 循环抢锁，当 5 s 过去，此时线程 A 释放锁，将默认值设置为 null，此时线程 B 就会抢到锁，进行操作。
+```java
+package com.zml.cas;  
+  
+import java.util.concurrent.TimeUnit;  
+import java.util.concurrent.atomic.AtomicReference;  
+  
+/**  
+* @author ZhangMinlei  
+* @description  
+* @date 2023-07-23 18:34  
+*/  
+public class SpinLockDemo {  
+  
+AtomicReference<Thread> atomicReference = new AtomicReference<>();  
+  
+public void lock() {  
+// 获取当前线程  
+Thread thread = Thread.currentThread();  
+System.out.println("start");  
+// 我们要上锁，希望当前没有任何值，所以预期值为空，修改值为现在的线程对象  
+while (!atomicReference.compareAndSet(null, thread)) {  
+  
+}  
+}  
+  
+public void unlock() {  
+// 获取当前线程对象  
+Thread thread = Thread.currentThread();  
+System.out.println("over~");  
+// 我们要解锁，当前的预期值必须是我们自己的线程对象，才能解锁，保证原子性，最后将锁置空  
+atomicReference.compareAndSet(thread, null);  
+}  
+  
+public static void main(String[] args) {  
+SpinLockDemo lock = new SpinLockDemo();  
+new Thread(() -> {  
+// 模拟占用锁5s  
+lock.lock();  
+try {  
+TimeUnit.SECONDS.sleep(5);  
+} catch (InterruptedException e) {  
+throw new RuntimeException(e);  
+}  
+lock.unlock();  
+}, "A").start();  
+  
+try {  
+TimeUnit.MILLISECONDS.sleep(500);  
+} catch (InterruptedException e) {  
+throw new RuntimeException(e);  
+}  
+  
+  
+new Thread(() -> {  
+lock.lock();  
+lock.unlock();  
+}, "B").start();  
+}  
+}
+```
+
+## CAS 的缺点
+- 循环时间长开销很大
+	- getAndAddInt 方法有一个 do while
+	- 如果 CAS 失败，会一直进行尝试，如果 CAS 长时间一直不成功，可能会给 CPU 带来很大开销
+
+- ABA 问题怎么产生的？
+	- CAS 算法实现一个重要前提需要提取出内存中某时刻的数据并在当下时刻比较并替换，那么在这个时间差类会导致数据的变化。 
+	- 比如说一个线程1从内存位置 V 中取出 A，这时候另一个线程2也从内存中取出 A，并且线程2进行了一些操作将值变成了 B，然后线程2又将 V 位置的数据变成 A，这时候线程1进行 CAS 操作发现内存中仍然是 A，预期 ok，然后线程1操作成功--------尽管线程1的 CAS 操作成功，但是不代表这个过程就是没有问题的。 
+	- 通俗来说，有线程修改了资源，但是最后又将资源复原, 此时我们 cas  是检查不出来的。
+		- 解决方案：版本号+CAS
+
+带有戳记流水号的原子引用类
+![](imgs/Pasted%20image%2020230723210323.png)
+
+AtomicStampedReference带戳记流水的简单演示（单线程）：
+```java
+  
+import lombok.AllArgsConstructor;  
+import lombok.Data;  
+  
+import java.util.concurrent.atomic.AtomicStampedReference;  
+  
+/**  
+* @author ZhangMinlei  
+* @description  
+* @date 2023-07-23 21:08  
+*/  
+public class atomicStampedReferenceTest {  
+public static void main(String[] args) {  
+Book javabook = new Book("java", 1);  
+Book mysqlbook = new Book("mysql", 1);  
+// 默认值是java这本书，流水号初始为1  
+AtomicStampedReference<Book> reference = new AtomicStampedReference<Book>(javabook, 1);  
+System.out.println(reference.getReference() + "\t" + reference.getStamp());  
+boolean b;  
+// 后两个参数表述 预期流水号，和修改后的流水号  
+b = reference.compareAndSet(javabook, mysqlbook, reference.getStamp(), reference.getStamp() + 1);  
+System.out.println(b + " " + reference.getStamp() + reference.getReference());  
+b = reference.compareAndSet(mysqlbook, javabook, reference.getStamp(), reference.getStamp() + 1);  
+System.out.println(b + " " + reference.getStamp() + reference.getReference());  
+}  
+}  
+  
+@Data  
+@AllArgsConstructor  
+class Book {  
+private String name;  
+private int id;  
+}
+```
+
+
+多线程情况下演示 AtomicStampedReference 解决 ABA 问题
+```java
+// 多线程使用atomicStampedReference解决ABA问题  
+@Test  
+public void atomicStampedReferenceT2() throws InterruptedException {  
+Book javabook = new Book("java", 1);  
+Book mysqlbook = new Book("mysql", 1);  
+AtomicStampedReference<Book> reference = new AtomicStampedReference<Book>(javabook, 1);  
+  
+new Thread(() -> {  
+System.out.println("A线程开始修改~");  
+reference.compareAndSet(javabook, mysqlbook, reference.getStamp(), reference.getStamp() + 1);  
+reference.compareAndSet(mysqlbook, javabook, reference.getStamp(), reference.getStamp() + 1);  
+System.out.println("A线程修改完毕，" + reference.getStamp() + reference.getReference());  
+}, "A").start();  
+  
+TimeUnit.SECONDS.sleep(1);  
+  
+new Thread(() -> {  
+System.out.println("B线程开始修改");  
+boolean b = reference.compareAndSet(mysqlbook, javabook, reference.getStamp(), reference.getStamp() + 1);  
+System.out.println("B线程修改结束" + reference.getStamp() + reference.getReference() +b);  
+}, "B").start();  
+}  
+}  
+  
+  
+@Data  
+@AllArgsConstructor  
+class Book {  
+private String name;  
+private int id;  
+}
+```
 
