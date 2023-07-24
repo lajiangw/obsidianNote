@@ -623,6 +623,17 @@ public class Lock8Demo {
 
 ```
 
+ * 现象描述：
+ * 1 标准访问 ab 两个线程，请问先打印邮件还是短信？ --------先邮件，后短信共用一个对象锁
+ * 2. SendEmail 钟加入暂停 3 秒钟，请问先打印邮件还是短信？---------先邮件，后短信共用一个对象锁
+ * 3. 添加一个普通的 hello 方法，请问先打印普通方法还是邮件？ --------先 hello，再邮件
+ * 4. 有两部手机，请问先打印邮件还是短信？ ----先短信后邮件资源没有争抢，不是同一个对象锁
+ * 5. 有两个静态同步方法，一步手机，请问先打印邮件还是短信？---------先邮件后短信共用一个类锁
+ * 6. 有两个静态同步方法，两部手机，请问先打印邮件还是短信？ ----------先邮件后短信共用一个类锁
+ * 7. 有一个静态同步方法一个普通同步方法，请问先打印邮件还是短信？ ---------先短信后邮件一个用类锁一个用对象锁
+ * 8. 有一个静态同步方法，一个普通同步方法，两部手机，请问先打印邮件还是短信？ -------先短信后邮件一个类锁一个对象锁
+
+
 结论：
 
 - 对于普通同步方法，**锁的是当前实例对象**，通常指 this，所有的同步方法用的都是同一把锁--->实例对象本身，**当有一个线程进入到同步方法中时，其他线程只能等待，不能访问方法中其他的同步方法。**
@@ -1694,6 +1705,8 @@ lock.unlock();
 	- 通俗来说，有线程修改了资源，但是最后又将资源复原, 此时我们 cas  是检查不出来的。
 		- 解决方案：版本号+CAS
 
+
+## ABA 问题解决方案
 带有戳记流水号的原子引用类
 ![](imgs/Pasted%20image%2020230723210323.png)
 
@@ -1769,4 +1782,419 @@ private String name;
 private int id;  
 }
 ```
+
+
+# 原子操作类
+Atomic 翻译成中文是原子的意思。在化学上，我们知道原子是构成一般物质的最小单位，在化学反应中是不可分割的。在我们这里 Atomic 是指一个操作是不可中断的。即使是在多个线程一起执行的时候，一个操作一旦开始，就不会被其他线程干扰。
+
+原子操作类可以分为一下几个大类：
+
+## 基本类型原子类
+- `AtomicInteger`：整型原子类
+- `AtomicBoolean`：布尔型原子类
+- `AtomicLong`：长整型原子类
+
+**常用 API：**
+```java
+public final int get() //获取当前的值
+public final int getAndSet(int newValue)//获取当前的值，并设置新的值
+public final int getAndIncrement()//获取当前的值，并自增
+public final int getAndDecrement() //获取当前的值，并自减
+public final int getAndAdd(int delta) //获取当前的值，并加上预期的值
+boolean compareAndSet(int expect, int update) //如果输入的数值等于预期值，则以原子方式将该值设置为输入值（update）
+public final void lazySet(int newValue)//最终设置为newValue,使用 lazySet 设置之后可能导致其他线程在之后的一小段时间内还是可以读到旧的值。
+```
+
+**演示案例：**
+CountDownLatch 类（计数器闭锁）是一个多线程同步工具，它的作用是允许一个或多个线程等待其他线程完成它们的操作，然后再继续执行。 
+CountDownLatch 内部维护一个计数器，该计数器初始化为一个正整数，表示需要等待的线程数。每个线程执行完自己的任务后，可以通过调用 CountDownLatch 的 `countDown()` 方法来减少计数器的值。当计数器的值减到零时，所有等待的线程将被释放，可以继续执行。 
+
+```java
+package com.zml.atomicInteger;  
+  
+  
+import java.util.concurrent.CountDownLatch;  
+import java.util.concurrent.atomic.AtomicInteger;  
+  
+/**  
+* @author ZhangMinlei  
+* @description  
+* @date 2023-07-24 11:53  
+*/  
+public class AtomicIntegerTest {  
+public static final int SIZE = 50;  
+  
+public static void main(String[] args) throws InterruptedException {  
+// 这里我们使用CountDownLatch来解决。  
+CountDownLatch countDownLatch = new CountDownLatch(SIZE);  
+MyNumber myNumber = new MyNumber();  
+  
+for (int i = 0; i < SIZE; i++) {  
+new Thread(() -> {  
+for (int j = 0; j < 1000; j++) {  
+myNumber.getNumber();  
+}  
+countDownLatch.countDown();  
+}).start();  
+}  
+// countDownLatch.await()会等待计数器的值为0才会运行，否则会堵塞进程，  
+countDownLatch.await();  
+// 此时我们直接获取值不是我们最终计算的结果，因为其他线程还没有算完main线程就把值取出来了。我们需要使用CountDownLatch  
+System.out.println(myNumber.at.get());  
+}  
+}  
+  
+class MyNumber {  
+public AtomicInteger at = new AtomicInteger();  
+  
+public void getNumber() {  
+at.getAndIncrement();  
+}  
+}
+```
+
+## 数组类型原子类
+- `AtomicIntegerArray`：整型数组原子类
+- `AtomicLongrArray`：长整型数组原子类
+- `AtomicReferenceArray`：用类型数组原子类
+
+**常用 API**
+```java
+public final int get(int i) //获取 index=i 位置元素的值
+public final int getAndSet(int i, int newValue)//返回 index=i 位置的当前的值，并将其设置为新值：newValue
+public final int getAndIncrement(int i)//获取 index=i 位置元素的值，并让该位置的元素自增
+public final int getAndDecrement(int i) //获取 index=i 位置元素的值，并让该位置的元素自减
+public final int getAndAdd(int i, int delta) //获取 index=i 位置元素的值，并加上预期的值
+boolean compareAndSet(int i, int expect, int update) //如果输入的数值等于预期值，则以原子方式将 index=i 位置的元素值设置为输入值（update）
+public final void lazySet(int i, int newValue)//最终 将index=i 位置的元素设置为newValue,使用 lazySet 设置之后可能导致其他线程在之后的一小段时间内还是可以读到旧的值。
+```
+
+**演示案例：**
+```java
+public class AtomicIArray {  
+public static void main(String[] args) {  
+AtomicIntegerArray atomicIntegerArray = new AtomicIntegerArray(new int[]{1, 2, 3});  
+  
+for (int i = 0; i < atomicIntegerArray.length(); i++) {  
+System.out.println(atomicIntegerArray.get(i));  
+}  
+  
+int andSet = atomicIntegerArray.getAndSet(2, 2022);  
+System.out.println(andSet+" "+atomicIntegerArray.get(0));  
+}  
+}
+```
+
+## 引用类型原子类
+- `AtomicReference` : 引用类型原子类
+- `AtomicStampedReference`：原子更新带有版本号的引用类型。该类将整数值与引用关联起来，可用于解决原子的更新数据和数据的版本号，可以解决使用 CAS 进行原子更新时可能出现的 ABA 问题。
+	- 解决修改过几次
+
+	- `AtomicMarkableReference`：原子更新带有标记的引用类型。该类将 boolean 标记与引用关联起来
+	- 解决是否修改过，它的定义就是将标记戳简化为 true/false，类似于一次性筷子。解决一次性修改问题。
+
+**演示案例**
+```java
+/**  
+* @author ZhangMinlei  
+* @description  
+* @date 2023-07-24 12:36  
+*/  
+public class AtomicMarkableReferenceTest {  
+static boolean flag = false;  
+  
+public static void main(String[] args) throws InterruptedException {  
+  
+AtomicMarkableReference<Integer> marketableReference = new AtomicMarkableReference<>(1, flag);  
+  
+new Thread(() -> {  
+boolean b = marketableReference.compareAndSet(1, 200, flag, !flag);  
+System.out.println("a修改~" + b);  
+}).start();  
+  
+TimeUnit.SECONDS.sleep(1);  
+new Thread(() -> {  
+boolean b = marketableReference.compareAndSet(1, 300, flag, !flag);  
+System.out.println("b修改" + b);  
+}).start();  
+  
+System.out.println("当前值" + marketableReference.getReference());  
+}  
+}
+```
+
+## 对象的属性修改原子类
+- `AtomicIntegerFieldUpdater`：原子更新对象中int类型字段的值
+- `AtomicLongFieldUpdater`：原子更新对象中Long类型字段的值
+- `AtomicReferenceFieldUpdater`：原子更新对象中引用类型字段的值
+
+**使用目的**
+- 当我们对于一个类只是上锁其中的一个属性而并非真个类时，使用 `synchronized` 上锁会非常的臃肿降低性能，这时就可以使用属性修改原子类，将锁的力度降低。
+- **以一种线程安全的方式操作非线程安全对象内的某些字段**
+
+**使用要求**、
+- 更新的对象属性必须使用 `public` `volatile` 修饰符
+- 因为对象的属性修改类型原子类都是抽象类，所以每次使用都必须使用静态方法 `newUpdater ()` 创建一个更新器，并且需要设置想要更新的类和属性
+
+**`AtomicIntegerFieldUpdater` 案例演示**
+```java
+public class AtomicIntegerFieldUpdaterTest {  
+public static void main(String[] args) throws InterruptedException {  
+CountDownLatch countDownLatch = new CountDownLatch(10);  
+Bank bank = new Bank();  
+  
+for (int j = 0; j < 10; j++) {  
+new Thread(() -> {  
+for (int i = 0; i < 100; i++) {  
+bank.addMoney(bank);  
+}  
+countDownLatch.countDown();  
+}).start();  
+}  
+countDownLatch.await();  
+System.out.println(bank.money);  
+}  
+}  
+  
+class Bank {  
+AtomicIntegerFieldUpdater<Bank> getAndIncrement = AtomicIntegerFieldUpdater.newUpdater(Bank.class, "money");  
+public volatile int money = 0;  
+  
+public void addMoney(Bank bank) {  
+getAndIncrement.getAndIncrement(bank);  
+}  
+}
+```
+
+**AtomicReferenceFieldUpdater 案例演示**
+```java
+public class AtomicReferenceFieldUpdaterTest {  
+public static void main(String[] args) throws InterruptedException {  
+  
+ExecutorService executorService = Executors.newFixedThreadPool(5);  
+MyClass myClass = new MyClass();  
+for (int i = 0; i < 5; i++) {  
+CompletableFuture.runAsync(() -> {  
+myClass.init(myClass);  
+});  
+}  
+executorService.shutdownNow();  
+}  
+}  
+  
+class MyClass {  
+public volatile Boolean flag = false;  
+AtomicReferenceFieldUpdater<MyClass, Boolean> fieldUpdater  
+= AtomicReferenceFieldUpdater.newUpdater(MyClass.class, Boolean.class, "flag");  
+  
+  
+public void init(MyClass myClass) {  
+if (fieldUpdater.compareAndSet(myClass, Boolean.FALSE, Boolean.TRUE)) {  
+System.out.println(Thread.currentThread().getName() + "初始化成功~");  
+} else {  
+System.out.println("已经被初始化了~");  
+}  
+}  
+}
+```
+
+## 原子操作增强类原理深度解析
+- `DoubleAccumulator`：一个或多个变量，它们一起保持运行 double 使用所提供的功能更新值 
+- `DoubleAdder`：一个或多个变量一起保持初始为零 double 总和 
+- `LongAccumulator`：一个或多个变量，一起保持使用提供的功能更新运行的值 long ，提供了自定义的函数操作 
+- `LongAdder`：一个或多个变量一起维持初始为零 long 总和（重点），只能用来计算加法，且从0开始计算
+
+**常用 API**
+![](imgs/Pasted%20image%2020230724150046.png)
+
+`LongAccumulator` Demo： 
+```java
+public class LongAccumulatorTest {  
+public static void main(String[] args) {  
+// 默认值是 left ，传进来的值是right  
+LongAccumulator longAccumulator = new LongAccumulator((left, right) -> left * right, 6);  
+longAccumulator.accumulate(2);  
+System.out.println(longAccumulator.get());  
+}  
+}
+```
+
+
+**面试题**
+1. 热点商品点赞计算器，点赞数加加统计，不要求实时精确
+2. 一个很大的 list，里面都是 int 类型，如何实现加加，思路？
+
+**点赞器四种实现方式，效率最好的是 `longAccumulator`。**
+```java
+package com.zml.atomic;  
+  
+import java.util.concurrent.CountDownLatch;  
+import java.util.concurrent.atomic.AtomicLong;  
+import java.util.concurrent.atomic.LongAccumulator;  
+import java.util.concurrent.atomic.LongAdder;  
+  
+/**  
+* @author ZhangMinlei  
+* @description 点赞累计  
+* @date 2023-07-24 15:22  
+*/  
+public class AccumulatedLikesDemo {  
+public static final int _1W = 10000;  
+  
+public static void main(String[] args) throws InterruptedException {  
+ClickNumber clickNumber = new ClickNumber();  
+CountDownLatch countDownLatch1 = new CountDownLatch(50);  
+CountDownLatch countDownLatch2 = new CountDownLatch(50);  
+CountDownLatch countDownLatch3 = new CountDownLatch(50);  
+CountDownLatch countDownLatch4 = new CountDownLatch(50);  
+long startTime;  
+long endTime;  
+  
+startTime = System.currentTimeMillis();  
+for (int i = 0; i < 50; i++) {  
+new Thread(() -> {  
+for (int j = 0; j < 10 * _1W; j++) {  
+clickNumber.clickBySynchronized();  
+}  
+countDownLatch1.countDown();  
+}).start();  
+}  
+countDownLatch1.await();  
+endTime = System.currentTimeMillis();  
+System.out.println("clickBySynchronized" + (endTime - startTime));  
+  
+startTime = System.currentTimeMillis();  
+for (int i = 0; i < 50; i++) {  
+new Thread(() -> {  
+for (int j = 0; j < 10 * _1W; j++) {  
+clickNumber.clickByAtomicLong();  
+}  
+countDownLatch2.countDown();  
+}).start();  
+  
+}  
+countDownLatch2.await();  
+endTime = System.currentTimeMillis();  
+System.out.println("clickByAtomicLong" + (endTime - startTime));  
+  
+startTime = System.currentTimeMillis();  
+for (int i = 0; i < 50; i++) {  
+new Thread(() -> {  
+for (int j = 0; j < 10 * _1W; j++) {  
+clickNumber.clickByLongAdder();  
+}  
+countDownLatch3.countDown();  
+}).start();  
+  
+}  
+countDownLatch3.await();  
+endTime = System.currentTimeMillis();  
+System.out.println("clickByLongAdder" + (endTime - startTime));  
+  
+startTime = System.currentTimeMillis();  
+for (int i = 0; i < 50; i++) {  
+new Thread(() -> {  
+for (int j = 0; j < 10 * _1W; j++) {  
+clickNumber.clickByLongAccumulator();  
+}  
+countDownLatch4.countDown();  
+}).start();  
+  
+}  
+countDownLatch4.await();  
+endTime = System.currentTimeMillis();  
+System.out.println("clickByLongAccumulator" + (endTime - startTime)+" "+clickNumber.longAccumulator.get());  
+}  
+}  
+  
+class ClickNumber {  
+int number = 0;  
+  
+public synchronized void clickBySynchronized() {  
+number++;  
+}  
+  
+AtomicLong atomicLong = new AtomicLong();  
+LongAdder longAdder = new LongAdder();  
+LongAccumulator longAccumulator = new LongAccumulator(Long::sum, 0);  
+  
+public void clickByAtomicLong() {  
+atomicLong.getAndIncrement();  
+}  
+  
+public void clickByLongAdder() {  
+longAdder.increment();  
+}  
+  
+public void clickByLongAccumulator() {  
+longAccumulator.accumulate(1);  
+}  
+  
+}
+```
+
+**源码、原理分析**
+架构
+![](imgs/LongAccumulator.png)
+
+### LongAdder 为什么这么快
+**- 原理（LongAdder 为什么这么快）**
+	- 如果是 JDK8，推荐使用 LongAdder 对象，比 AtomicLong 性能更好（减少乐观锁的重试次数）
+	- - LongAdder 是 Striped64的子类
+	- Striped64的基本结构
+![](imgs/Pasted%20image%2020230724155844.png)
+![](imgs/Pasted%20image%2020230724160639.png)
+
+- cell：是 java. util. concurrent. atomic 下 Striped64的一个内部类
+
+**为什么- LongAdder 为什么这么快，他解决 AtomicLong 哪些问题？**
+ **AtomicLong 问题**
+AtomicLong 在单线程的情况下使用，是非常合适的，但是一旦在高并发的情况下，会导致性能下降，例如现在有 1 w 个线程。但同时只能 1 个线程能进行操作，其他 9999 个线程只能自旋，导致 cpu 空转，性能下降。
+
+**LongAdder 为什么这么快**
+- LongAdder 的基本思路就是**分散热点**，将 value 值分散到一个 Cell 数组中，不同线程会命中到数组的不同槽中，各个线程**只对自己槽中的那个值进行 CAS** 操作，这样热点就被分散了，冲突的概率就小很多，如果要获取真正的 long 值，只要将**各个槽中的变量值累加返回**
+- 
+- sum ()会将所有的 **Cell 数组中的 value 和 base 累加作为返回值**，核心的思想就是将之前 **AtomicLong 一个 value 的更新压力分散到多个 value 中去**，从而降级更新热点。
+- 内部有一个 base 变量，一个 Cell[]数组
+	- base变量：低并发，直接累加到该变量上
+	- Cell[ ]数组：高并发，累加进各个线程自己的槽 Cell[i]中
+	- 数学公式表示：
+	- ![](imgs/Pasted%20image%2020230724161336.png)
+
+### 深度解析
+当 LongAdder 线程多起来之后，分配原则是怎样的？
+	- LongAdder 在无竞争的情况下，跟 AtomicLong 一样，对同一个 base 进行操作，当出现竞争关系时则是采用**化整为零分散热点的做法**，**用空间换时间**，用一个数组 cells，**将一个 value 值拆分进这个数组 cells**。多个线程需要同时对 value 进行操作的时候，可以对线程 id 进行**hash 得到 hash 值**，再根据**hash 值映射到这个数组 cells 的某个下标**，再对该下标所对应的值进行自增操作。当所有线程操作完毕，将数组 cells 的所有值和 base 都加起来作为最终结果。
+
+- **add (1L) 方法解析**
+	![](imgs/Pasted%20image%2020230724172044.png)
+	- 1 如果 Cells 表为空，尝试用 CAS 更新 base 字段，成功则退出
+	- 2 如果Cells表为空，CAS更新base字段失败，出现竞争，uncontended为true，调用longAccumulate（新建数组）
+	- 3 如果Cells表非空，但当前线程映射的槽为空，uncontended为true，调用longAccumulate（初始化）
+	- 4 如果 Cells 表非空，且当前线程映射的槽非空，CAS 更新 Cell 的值，成功则返回，否则，uncontended 设为 false，调用 longAccumulate（扩容）
+
+**- longAccumulate**
+![](imgs/Pasted%20image%2020230724173615.png)
+
+**- sum**
+![](imgs/Pasted%20image%2020230724173626.png)
+- sum ()会将所有 Cell 数组中的 **value 和 base 累加作为返回值**。核心思想就是将之前 AtomicLong 一个 value 的**更新压力分散到多个 value 中去**，从而降级更新热点。 
+- sum 执行时，**并没有限制对 base 和 cells 的更新**，所以 LongAdder **不是强一致性**的，它是最终一致性的，**对 cell 的读取无法保证是最后一次写入的值**，所以在**没有并发**的场景下，可以获得正确的结果。在并发情况下，他的值是不准确的。
+
+**- 使用总结**
+- AtomicLong 线程安全，可允许一些性能损耗，**要求高精度时可使用**，保证精度，多个线程对单个热点值 value 进行了原子操作-----保证精度，性能代价
+---
+- LongAdder 当需要在高并发场景下有较好的性能表现，**且对值得精确度要求不高时**，可以使用，LongAdder 时每个线程拥有自己得槽，各个线程一般只对自己槽中得那个值进行 CAS 操作---保证性能，精度代价
+
+### 总结
+- AtomicLong
+	
+	- 原理：CAS+自旋
+	- 场景：低并发下的全局计算，AtomicLong 能保证并发情况下计数的准确性，其内部通过 CAS 来解决并发安全性问题 
+	- 缺陷：高并发后性能急剧下降----AtomicLong 的自旋会成为瓶颈（N 个线程 CAS 操作修改线程的值，每次只有一个成功过，其他 N-1失败，**失败的不停自旋直至成功**，这样大量失败自旋的情况，一下子 cpu 就打高了） 
+
+- LongAdder
+	
+	- 原理：CAS+Base+Cell数组分散-----空间换时间并**分散了热点数据**
+	- 场景：高并发下的全局计算
+	- 缺陷：sum求和后还有计算线程修改结果的话，**最后结果不够准确**
 
