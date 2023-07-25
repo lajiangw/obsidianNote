@@ -57,7 +57,7 @@ Future接口（FutureTask实现类）定义了操作`异步任务`执行一些�
 # Callable 接口复习
 `Callable` 接口是 Java 提供的一个并发编程工具，它与另一个接口 `Runnable` 类似，都用于表示可以在多线程环境中执行的任务。但是，`Callable` 接口在某些方面与 `Runnable` 有所不同：
 1. 返回结果：`Runnable` 的 `run()` 方法没有返回值，而 `Callable` 的 `call()` 方法可以返回一个结果。`call()` 方法使用 `Future` 对象进行包装，可以用于获取执行结果，或者在任务完成时阻塞地获取结果。
-    
+   
 2. 抛出异常：`Runnable` 的 `run()` 方法不能抛出受检查的异常（checked exception），只能通过捕获并在内部处理。而 `Callable` 的 `call()` 方法可以抛出受检查的异常，允许在任务执行过程中抛出异常。
 
 ```java
@@ -476,7 +476,7 @@ executorService.shutdownNow();
 - **对计算速度进行选用**
 	- 谁快用谁
 	- applyToEither
-Demo：
+	Demo：
 ```java
 // 模拟 a小线程完成需要2秒，b线程完成需要1秒， applyToEither方法使用处理快的返回结果来进行操作  
 @Test  
@@ -650,12 +650,12 @@ public class Lock8Demo {
 	- synchronized同步代码块
 	- 实现使用的是 `monitorenter` 和 `monitorexit` 指令
 	- 会有连个 `monitorexit` 是因为保证出现异常也要释放锁的情况。
-![](imgs/Pasted%20image%2020230722112601.png)
+	![](imgs/Pasted%20image%2020230722112601.png)
 
 - synchronized 普通同步方法
 	
 	- 调用指令将会检查方法的 `ACC_SYNCHRONIZED` 访问标志是否被设置，如果设置了，执行线程会将现持有 monitor 锁，然后再执行该方法，最后在方法完成（无论是否正常结束）时释放 monitor
-![](imgs/Pasted%20image%2020230722112622.png)
+	![](imgs/Pasted%20image%2020230722112622.png)
 
 - synchronized 静态同步方法
 	
@@ -1932,7 +1932,7 @@ System.out.println("当前值" + marketableReference.getReference());
 - 当我们对于一个类只是上锁其中的一个属性而并非真个类时，使用 `synchronized` 上锁会非常的臃肿降低性能，这时就可以使用属性修改原子类，将锁的力度降低。
 - **以一种线程安全的方式操作非线程安全对象内的某些字段**
 
-**使用要求**、
+**使用要求**
 - 更新的对象属性必须使用 `public` `volatile` 修饰符
 - 因为对象的属性修改类型原子类都是抽象类，所以每次使用都必须使用静态方法 `newUpdater ()` 创建一个更新器，并且需要设置想要更新的类和属性
 
@@ -2197,4 +2197,244 @@ AtomicLong 在单线程的情况下使用，是非常合适的，但是一旦在
 	- 原理：CAS+Base+Cell数组分散-----空间换时间并**分散了热点数据**
 	- 场景：高并发下的全局计算
 	- 缺陷：sum求和后还有计算线程修改结果的话，**最后结果不够准确**
+
+# ThreadLocal
+## ThreadLocal 简介
+**面试题**
+
+- ThreadLocal 中 ThreadLocalMap 的数据结构和关系
+- ThreadLocal的key是弱引用，这是为什么？
+- ThreadLocal内存泄漏问题你知道吗？
+- ThreadLocal 中最后为什么要加 remove 方法？
+
+**ThreadLocal 是什么？**
+
+
+  `ThreadLocal` 提供**线程局部变量**。这些变量与正常的变量不同，因为每一个线程在访问 ThreadLocal 实例的时候（通过其 get 或 set 方法）都有自己的、**独立初始化的变量副本**。ThreadLocal 实例通常是类中的私有静态字段，使用它的目的是希望将状态（例如，用户 ID 或事物 ID）与线程关联起来。
+
+ **作用**
+ 实现每一个线程都有自己专属的**本地变量副本**（自己用自己的变量不用麻烦别人，不和其他人共享，人人有份，人各一份）。主要解决了让每个线程绑定自己的值，通过使用 get ()和 set ()方法，获取默认值或将其改为当前线程所存的**副本的值从而避免了线程安全问题**。比如8锁案例中，资源类是使用同一部手机，多个线程抢夺同一部手机，假如人手一份不是天下太平？ 
+
+通俗来说 `ThreadLocal` 解决了每个线程自己独立的变量内容。
+类似 csgo 每个玩家都是一个线程，每个玩家的武器，血量，护甲，子弹都是不同的，都是需要自己独有内容。
+**从主内存的共享变量中拷贝一份到本线程的私有变量，然后进行修改维护，不是直接修改共享变量的值**
+
+**Api**
+![](imgs/Pasted%20image%2020230725113923.png)
+
+**演示案例**
+```java
+package com.zml.threadLocal;  
+  
+import java.util.Random;  
+import java.util.concurrent.TimeUnit;  
+  
+class House {  
+int saleCount = 0;  
+  
+public synchronized void saleHouse() {  
+saleCount++;  
+}  
+  
+ThreadLocal<Integer> saleVolume = ThreadLocal.withInitial(() -> 0);  
+  
+public void saleVolumeByThreadLocal() {  
+saleVolume.set(1 + saleVolume.get());  
+}  
+  
+  
+}  
+  
+public class ThreadLocalDemo {  
+public static void main(String[] args) {  
+House house = new House();  
+for (int i = 1; i <= 5; i++) {  
+new Thread(() -> {  
+int size = new Random().nextInt(5) + 1;  
+try {  
+for (int j = 1; j <= size; j++) {  
+house.saleHouse();  
+house.saleVolumeByThreadLocal();  
+}  
+System.out.println(Thread.currentThread().getName() + "\t" + "号销售卖出：" + house.saleVolume.get());  
+} finally {  
+house.saleVolume.remove();  
+}  
+}, String.valueOf(i)).start();  
+  
+}  
+try {  
+TimeUnit.MILLISECONDS.sleep(300);  
+} catch (InterruptedException e) {  
+e.printStackTrace();  
+}  
+System.out.println(Thread.currentThread().getName() + "\t" + "共计卖出多少套： " + house.saleCount);  
+}  
+}  
+/**  
+* 3 号销售卖出：1  
+* 4 号销售卖出：3  
+* 5 号销售卖出：4  
+* 2 号销售卖出：3  
+* 1 号销售卖出：5  
+* main 共计卖出多少套： 16  
+*/
+```
+
+
+**总结**
+- 因为每个 Thread 内有自己的实例副本且该副本只有当前线程自己使用
+- 既然其他ThreadLocal不可访问，那就不存在多线程间共享问题
+- 统一设置初始值，但是每个线程对这个值得修改都是各自线程互相独立得
+- 如何才能不争抢
+	- 加入synchronized或者Lock控制资源的访问顺序
+	- ThreadLocal 人手一份，大家各自安好，没有必要争抢 
+
+## 源码分析
+**Thread、ThreadLocal、ThreadLocalMap 关系** 
+- ThreadLocalMap 实际上就是一个以 ThreadLocal 实例为 Key，任意对象为 value 的 Entry 对象
+- 当我们为 ThreadLocal 变量赋值，实际上就是以当前 ThreadLocal 实例为 Key，值为 value 的 Entry 往这个 ThreadLocalMap 中存放
+![](imgs/Pasted%20image%2020230725130642.png)
+
+- ThreadLocalMap 从字面上就可以看出这是一个保存 ThreadLocal 对象的 map（其实是以 ThreadLocal 为 Key），不过是经过了两层包装的 ThreadLocal 对象：
+![](imgs/Pasted%20image%2020230725130702.png)
+
+- **JVM 内部维护了一个线程版的 Map<ThreadLocal, Value>**（通过 ThreadLocal 对象的 set 方法，结果把 ThreadLocal 对象自己当作 Key，放进了 ThreadLocalMap 中），每个线程要用到这个 T 的时候，用当前的**线程去 Map 里面获取**，通过这样让每个线程都拥有了自己**独立的变量**，人手一份，竞争条件被彻底消除，在并发模式下是绝对安全的变量。 
+
+底层还是一个 Map，通过 ThreadLocal 去自己的线程 map 里面去取值，因为是从自己的线程取值，所以不会有线程竞争。
+
+## ThreadLocal 内存泄漏问题
+**什么事内存泄露？**
+不再会被使用的对象或者变量占用的内存不能被回收，就是内存泄漏
+
+**导致原因**
+![](imgs/Pasted%20image%2020230725132649.png)
+因为是弱引用对象，所以会导致内存泄露。
+
+**强软弱虚引用关系**
+![](imgs/Pasted%20image%2020230725142019.png)
+**强引用**
+OOM 溢出错误，jvm 尝试分配对象时，发现内存不够使用，出现的错误
+
+- 对于强引用的对象，**就算是出现了 OOM  也不会对该对象进行回收**，死都不收，当一个对象被强引用变量引用时，它处于可达状态，是不可能被垃圾回收机制回收的，**即使该对象以后永远都不会被用到，JVM 也不会回收**，因此强引用是造成 Java 内存泄露的主要原因之一。
+
+**软引用**
+- 是一种相对强引用弱化了一些的引用，对于只有软引用的对象而言，**当系统内存充足时，不会被回收，当系统内存不足时，他会被回收**，软引用通常用在对内存敏感的程序中，比如高速缓存，内存够用就保留，不够用就回收。 
+
+**弱引用**
+- 比软引用的生命周期更短，对于只有弱引用的对象而言，**只要垃圾回收机制一运行，不管 JVM 的内存空间是否足够，都会回收该对象占用的内存**。
+
+**- 软引用和弱引用的使用场景----->假如有一个应用需要读取大量的本地图片：**
+- 如果每次读取图片都从硬盘读取则会严重影响性能
+- 如果一次性全部加载到内存中又可能会造成内存溢出
+- 此时使用软应用来解决，设计思路时：用一个 HashMap 来保存图片的路径和与相应图片对象关联的软引用之间的映射关系，在内存不足时，JVM 会自动回收这些缓存图片对象所占用的空间，有效避免了 OOM 的问题
+
+**虚引用**
+- 虚引用必须和引用队列联合使用，如果一个对象仅**持有虚引用**，那么它就和没有**任何引用一样**，在任何时候都有可能被垃圾回收器回收，它**不能单独使用也不能通过它访问对象。**
+- 虚引用的主要作用是跟踪对象被垃圾回收的**状态**。仅仅是提供了一种确保对象被 finalize 后，做某些事情的**通知机制**。换句话说就是在对象被 GC 的时候会收到一个系统通知或者后续添加进一步的处理，**用来实现比 finalize 机制更灵活的回收操作**。 
+- **PhantomReference（虚引用）的 get 方法总是返回 null，因此无法访问引用对象**
+- **虚引用必须和引用队列联合使用**
+
+**为什么要用弱引用？不用如何？**
+![](imgs/Pasted%20image%2020230725145814.png)
+Map 使用强引用会导致当没有线程指向的时候，他依然没有被 gc 回收。会造成内存泄露。
+通俗说线程相当于人，threadLocal 相当于身份证，map 则是保存身份证信息的集合。人都死了，身份证也应该一并删除。如果使用强引用，则不会 gc 回收。所以使用弱引用。
+- 为什么要用弱引用：
+	
+	- 当方法执行完毕后，栈帧销毁，强引用 t1也就没有了，但此时线程的 **ThreadLocalMap 里某个 entry 的 Key 引用还指向这个对象**，若这个 Key 是强引用，就会导致 Key 指向的 ThreadLocal 对象即 V 指向的对象不能被 gc 回收，造成内存泄露 
+	- 若这个引用时弱引用就大概率会减少内存泄漏的问题（**当然，还得考虑 key 为 null 这个坑**），使用弱引用就可以使 ThreadLocal 对象在方法执行完毕后顺利被回收且 entry 的 key 引用指向为 null 
+
+- 这里有个需要注意的问题：
+	
+	- ThreadLocalMap 使用 ThreadLocal 的弱引用作为 Key，如果一个 ThreadLocal 没有外部强引用引用他，那么系统 gc 时，这个 ThreadLocal 势必会被回收，这样一来，ThreadLocalMap 中就会出现 **Key 为 null 的 Entry**，就没有办法访问这些 Key 为 null 的 Entry 的 value，如果当前线程迟迟不结束的话（好比正在使用线程池），**这些 key 为 null 的 Entry 的 value 就会一直存在一条强引用链**
+	- 虽然弱引用，保证了 Key 指向的 ThreadLocal 对象能够被及时回收，但是 v 指向的 value 对象是需要 ThreadLocalMap 调用 get、set 时发现 key 为 null 时才会去回收整个 entry、value，**因此弱引用不能100%保证内存不泄露**，我们要在不使用某个 ThreadLocal 对象后，**手动调用 remove 方法来删除它**，尤其是在线程池中，不仅仅是内存泄漏的问题，**因为线程池中的线程是重复使用的，意味着这个线程的 ThreadLocalMap 对象也是重复使用的**，如果我们不手动调用 remove 方法，那么后面的线程就有可能获取到上个线程遗留下来的 value 值，造成 bug。 
+
+- 清除脏 Entry----key 为 null 的 entry
+- Set 方法
+- ![](imgs/Pasted%20image%2020230725150314.png)
+- Get 方法
+- ![](imgs/Pasted%20image%2020230725150440.png)
+- Remove 方法
+- ![](imgs/Pasted%20image%2020230725150449.png)
+Get 方法回去判断 ThardLocal 是否为空，然后返回 null，容易造成空指针异常。
+
+## 最佳实践
+
+- **ThreadLocal一定要初始化，避免空指针异常。**
+- **建议把 ThreadLocal 修饰为 static**
+	- 因为 ThreadLocal 底层实现的 ThreadLocalMap，所以他只需要实例化一次就可以，不需要反复创建。
+- **用完记得手动 remove**
+	- 防止内存泄露
+
+## 总结
+- ThreadLocal 并不解决线程间共享数据的问题 
+- ThreadLocal 适用于变量在线程间隔离且在方法间共享的场景 
+- ThreadLocal通过隐式的在不同线程内创建独立实例副本避免了实例线程安全的问题
+- 每个线程持有一个只属于它自己的专属 map 并维护了 ThreadLocal 对象与具体实例的映射，该 Map 由于只被持有他的线程访问，故不存在线程安全以及锁的问题 
+- ThreadLocalMap 的 Entry 对 ThreadLocal 的引用为弱引用。避免了 ThreadLocal 对象无法被回收的问题 
+- 都会通过 expungeStaleEntry，cleanSomeSlots，replaceStaleEntry 这三个方法回收键为 null 的 Entry 对象的值（即为具体实例）以及 entry 对象本身从而防止内存泄漏，属于安全加固的方法
+- 群雄逐鹿起纷争，人各一份天下安。
+
+# Java 对象内存布局和对象头
+**面试题**
+- 说下 JUC，AQS 的大致流程
+- CAS自旋锁，是获取不到锁就一直自旋吗？CAS和synchronized区别在哪里，为什么CAS好，具体优势在哪里？
+- sychronized底层是如何实现的，实现同步的时候用到了CAS 了吗？具体哪里用到了？
+- 对象头存储那些信息？长度是多少位存储？
+
+  **Object object = new Object ()谈谈你对这句话的理解？**
+	
+	- 位置所在-------->JVM堆->新生区->伊甸园区
+	- 构成布局-------->对象头+实例数据+对齐填充
+
+**对象在堆内存中布局**
+在 HotSpot 虚拟机里，对象在堆内存的存储布局可以划分为三个部分：对象头（Header）、实例数据（Instance Data） 和对齐填充（Padding）。 
+
+![](imgs/Pasted%20image%2020230725160030.png)
+
+## 对象在堆内存中的存储布局
+**对象头包含以下两部分，数组对象会包括另外一项数组长度。**
+		1. **标记字（Mark Word）**：
+			1. 标记字是对象头的主要部分，用于存储对象的一些状态信息，比如锁信息、哈希码、GC 分代信息等。标记字的具体结构在不同的 JVM 实现中可能会有所不同，因为它的具体组成取决于 JVM 的设计和实现策略。	- **类元信息（类型指针）**
+		2.  **类元信息（类型指针）**
+			1  对象指向它的类元数据的指针，虚拟机通过这个指针来确定这个对象哪个类的实例
+	对象头占 16 字节，标记字和类元信息各占 8 字节。
+
+**实例数据**
+	- 存放类的属性（Field）数据信息，包括父类的属性信息
+
+
+- **对齐填充**（保证8个字节的倍数）
+	- 虚拟机要求对象起始地址必须是8字节的整数倍，填充数据不是必须存在的，仅仅是为了字节对齐，这部分内存按8字节补充对齐。
+
+**对象头的 MarkWord**
+对象头的占用内存分布， gc 分代年龄是 0-15，是 java 出厂规定好的，不可以修改。
+![](imgs/Pasted%20image%2020230725173627.png)
+
+New 一个 object 对象他的占用内存分布
+![](imgs/Pasted%20image%2020230725173656.png)
+
+**为什么类型指针是 4 个字节而不是 8？**
+因为压缩指针，默认是 8 个字节，经过压缩也就成为 4 个字节。
+Java 出厂默认开启压缩指针。
+
+- Java -XX:+PrintCommandLineFlags -version 查看当前虚拟机信息
+- 默认开启压缩指针，开启后将上述类型指针压缩为4字节，以节约空间
+- ![](https://cdn.nlark.com/yuque/0/2023/png/35653686/1681444473777-8ef4114e-44a5-4cd7-ab0f-845843b05696.png)
+
+- 手动关闭压缩指针： -XX: -UseCompressedClassPointers
+
+- ![](https://cdn.nlark.com/yuque/0/2023/png/35653686/1681444812291-4f3c2e48-baec-4ab6-bf6b-e5a105b11d17.png)
+
+#  Synchronized 与锁升级
+
+
+
+
+
+
+
+
+
+
 
