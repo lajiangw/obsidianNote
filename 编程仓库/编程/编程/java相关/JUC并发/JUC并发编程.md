@@ -2428,13 +2428,337 @@ Java 出厂默认开启压缩指针。
 
 #  Synchronized 与锁升级
 
+**Synchronized 锁升级是当 Synchronized 遇到不同线程竞争的时候会使用不同的锁来解决多线程问题。**
+
+**面试题**
+- 谈谈你对 Synchronized 的理解
+- Sychronized的锁升级你聊聊
+- Synchronized实现原理，monitor对象什么时候生成的？知道monitor的monitorenter和monitorexit这两个是怎么保证同步的嘛？或者说这两个操作计算机底层是如何执行的
+- 偏向锁和轻量级锁有什么区别
+
+**Synchronized 的性能变化**
+- Java5以前，只有 Synchronized，这个是操作系统级别的重量级操作
+	
+	- 重量级锁，假如锁的竞争比较激烈的话，性能下降
+	- Java 5之前用户态和内核态之间的转换
+![](imgs/Pasted%20image%2020230726104403.png)
+- Java6 之后为了减少获得锁和释放锁所带来的性能消耗，引入了轻量级锁和偏向锁
+
+## Synchronized 锁种类及升级步骤
+**多线程访问情况**
+	- 只有一个线程来访问，有且唯一 Only One
+	- 有两个线程（2个线程交替访问）
+	- 竞争激烈，更多线程来访问
+
+**升级流程**
+- Synchronized 用的锁是存在 Java 对象头里的 MarkWord 中，锁升级功能主要依赖 MarkWord 中锁标志位和释放偏向锁标志位 
+![](imgs/Pasted%20image%2020230726120151.png)
+
+- 锁指向，请牢记
+	- 偏向锁：MarkWord存储的是偏向的线程ID
+	- 轻量锁：MarkWord存储的是指向线程栈中Lock Record的指针
+	- 重量锁：MarkWord 存储的是指向堆中的 monitor 对象（系统互斥量指针）
+
+### 无锁
+对象头中的字节是倒着看的。
+![](imgs/Pasted%20image%2020230726120212.png)
+
+**偏锁**
+偏向锁：**单线程竞争**，当线程 A 第一次竞争到锁时，通过修改 MarkWord 中的偏向线程 ID、偏向模式。如果不存在其他线程竞争，那么持有偏向锁的线程将永远不需要进行同步。
+主要作用：
+	- 当一段同步代码一直被同一个线程多次访问，由于只有一个线程那么该线程在后续访问时便会自动获得锁
+	- 同一个老顾客来访，直接老规矩行方便。
+
+结论：
+	- HotSpot的作者经过研究发现，大多数情况下：在多线程情况下，**锁不仅不存在多线程竞争，还存在由同一个线程多次获得的情况**，偏向锁就是在这种情况下出现的，它的出现是为了解决只有一个线程执行同步时提高性能。
+	- 偏向锁会偏向于第一个访问锁的线程，如果在接下来的运行过程中，该锁没有被其他线程访问，**则持有偏向锁的线程将永远不需要出发同步**。也即偏向锁在资源在没有竞争情况下消除了同步语句，**懒得连 CAS 操作都不做了**，直接提高程序性能。
+
+理论落地：
+![](imgs/Pasted%20image%2020230726123356.png)
+
+**偏向锁 JVM 命令：**
+![](imgs/Pasted%20image%2020230726124043.png)
+
+案例演示：
+- 偏向锁默认情况演示---只有一个线程
+```java
+/**
+ * @author Guanghao Wei
+ * @create 2023-04-14 14:06
+ */
+public class SynchronizedUpDemo {
+
+    public static void main(String[] args) {
+        /**
+         * 这里偏向锁在JDK6以上默认开启，开启后程序启动几秒后才会被激活，可以通过JVM参数来关闭延迟 -XX:BiasedLockingStartupDelay=0
+         */
+//        try { TimeUnit.SECONDS.sleep(5); } catch (InterruptedException e) { e.printStackTrace(); }
+        Object o = new Object();
+        synchronized (o) {
+            System.out.println(ClassLayout.parseInstance(o).toPrintable());
+        }
+    }
+}
+```
+这里 101 代表开启偏向锁
+![](imgs/Pasted%20image%2020230726130657.png)
+
+**偏向锁的撤销**
+- 当有另外一个线程逐步来竞争锁的时候，就不能再使用偏向锁了，要升级为轻量级锁，使用的是**等到竞争出现才释放锁的机制**
+-  竞争线程尝试 CAS 更新对象头失败，会等到全局安全点（此时不会执行任何代码）撤销偏向锁，同时检查持有偏向锁的线程是否还在执行：
+	- 第一个线程正在执行Synchronized方法（处于同步块），它还没有执行完，其他线程来抢夺，该偏向锁会被取消掉并出现锁升级，此时轻量级锁由原来持有偏向锁的线程持有，继续执行同步代码块，而正在竞争的线程会自动进入自旋等待获得该轻量级锁
+	- 第一个线程执行完 Synchronized（退出同步块），则将对象头设置为无所状态并撤销偏向锁，重新偏向。
+
+![](imgs/Pasted%20image%2020230726131815.png)
+
+题外话：Java15以后逐步废弃偏向锁，需要手动开启------->维护成本高
+
+### 轻量锁
+概念：**多线程竞争，但是任意时候最多只有一个线程竞争**，即不存在锁竞争太激烈的情况，也就没有线程阻塞。
+
+主要作用：有线程来参与锁的竞争，但是获取锁的冲突时间极短---------->**本质是自旋锁 CAS**
+![](imgs/Pasted%20image%2020230726131941.png)
+
+轻量锁的获取：
+![](imgs/Pasted%20image%2020230726131952.png)
+
+![](imgs/Pasted%20image%2020230726132005.png)
+
+自旋一定程度和次数（Java8 之后是自适应自旋锁------意味着自旋的次数不是固定不变的）：
+	- 线程如果自旋成功了，那下次自旋的最大次数会增加，因为JVM认为既然上次成功了，那么这一次也大概率会成功
+	- 如果很少会自选成功，那么下次会减少自旋的次数甚至不自旋，避免CPU空转
+
+轻量锁和偏向锁的区别：
+	- 争夺轻量锁失败时，自旋尝试抢占锁
+	- 轻量级锁每次退出同步块都需要释放锁，而偏向锁是在竞争发生时才释放锁
+
+### 重锁
+有大量线程参与锁的竞争，冲突性很高，触发重锁
+
+![](https://cdn.nlark.com/yuque/0/2023/png/35653686/1681455335764-3bb5bb5f-d014-4b25-9755-e0ca2c9aa809.png)
+
+![](imgs/Pasted%20image%2020230726150304.png)
 
 
 
+### JIT 编译器对锁的优化
+JIT ：**Just In Time Compiler 即时编译器**
+
+**锁消除**
+```java
+/**
+ * @author Guanghao Wei
+ * @create 2023-04-14 15:13
+ * 锁消除
+ * 从JIT角度看想相当于无视他，synchronized(o)不存在了
+ * 这个锁对象并没有被共用扩散到其他线程使用
+ * 极端的说就是根本没有加锁对象的底层机器码，消除了锁的使用
+ */
+
+public class LockClearUpDemo {
+    static Object object = new Object();
+
+    public void m1() {
+        //锁消除问题，JIT会无视它，synchronized(o)每次new出来的，都不存在了，非正常的
+        Object o = new Object();
+        synchronized (o) {
+            System.out.println("-----------hello LockClearUpDemo" + "\t" + o.hashCode() + "\t" + object.hashCode());
+        }
+    }
+
+    public static void main(String[] args) {
+        LockClearUpDemo lockClearUpDemo = new LockClearUpDemo();
+        for (int i = 0; i < 10; i++) {
+            new Thread(() -> {
+                lockClearUpDemo.m1();
+            }, String.valueOf(i)).start();
+        }
+    }
+}
+/**
+ * -----------hello LockClearUpDemo	229465744	57319765
+ * -----------hello LockClearUpDemo	219013680	57319765
+ * -----------hello LockClearUpDemo	1109337020	57319765
+ * -----------hello LockClearUpDemo	94808467	57319765
+ * -----------hello LockClearUpDemo	973369600	57319765
+ * -----------hello LockClearUpDemo	64667370	57319765
+ * -----------hello LockClearUpDemo	1201983305	57319765
+ * -----------hello LockClearUpDemo	573110659	57319765
+ * -----------hello LockClearUpDemo	1863380256	57319765
+ * -----------hello LockClearUpDemo	1119787251	57319765
+ */
+```
+
+**锁粗化**
+```java
+/**
+ * @author Guanghao Wei
+ * @create 2023-04-14 15:18
+ * 锁粗化
+ * 假如方法中首尾相接，前后相邻的都是同一个锁对象，那JIT编译器会把这几个synchronized块合并为一个大块
+ * 加粗加大范围，一次申请锁使用即可，避免次次的申请和释放锁，提高了性能
+ */
+public class LockBigDemo {
+    static Object objectLock = new Object();
+
+    public static void main(String[] args) {
+        new Thread(() -> {
+            synchronized (objectLock) {
+                System.out.println("111111111111");
+            }
+            synchronized (objectLock) {
+                System.out.println("222222222222");
+            }
+            synchronized (objectLock) {
+                System.out.println("333333333333");
+            }
+            synchronized (objectLock) {
+                System.out.println("444444444444");
+            }
+            //底层JIT的锁粗化优化
+            synchronized (objectLock) {
+                System.out.println("111111111111");
+                System.out.println("222222222222");
+                System.out.println("333333333333");
+                System.out.println("444444444444");
+            }
+        }, "t1").start();
+    }
+}
+```
 
 
+- 没有锁：自由自在
+- 偏向锁：唯我独尊
+- 轻量锁：楚汉争霸
+- 重量锁：群雄逐鹿
+## 小总结
+锁升级过程
+![](imgs/Pasted%20image%2020230726150328.png)
+
+**锁升级后，hashcode 去哪了？**
+![](imgs/Pasted%20image%2020230726150607.png)
+通俗说：
+![](imgs/Pasted%20image%2020230726150626.png)
+
+- 各种锁优缺点、synchronized 锁升级和实现原理
+![](imgs/Pasted%20image%2020230726150843.png)
+
+# AbstractQueuedSynchronizer 之 AQS
+## 前置知识
+- 公平锁和非公平锁
+	
+	- 公平锁：锁被释放以后，先申请的线程先得到锁。性能较差一些，因为公平锁为了保证时间上的绝对顺序，上下文切换更频繁
+	- 非公平锁：锁被释放以后，后申请的线程可能会先获取到锁，是随机或者按照其他优先级排序的。性能更好，但可能会导致某些线程永远无法获取到锁
+
+- 可重入锁
+	
+	- 也叫做递归锁，指的是线程可以再次获取自己的内部锁，比如一个线程获取到了对象锁，此时这个对象锁还没有释放，当其想再次获取这个对象锁的时候还是可以获取的，如果不可重入的话，会导致死锁。
+
+- 自旋思想
+	
+	- 当线程请求锁时，如果锁已经被其他线程持有，那么该线程会不断地重试获取锁，而不是被挂起等待，这种不断尝试获取锁的行为称为自旋
+
+- LockSupport
+	
+	- 一个工具类，用于线程的阻塞和唤醒操作，类似于wait()和notify()方法，但是更加灵活和可控
+	- 提供了park()和unpark()两个静态方法用于线程阻塞和唤醒操作。
+	- 优点在于可以在任意时刻阻塞和唤醒线程而不需要事先获取锁或监视器对象。
+
+- 数据结构之双向链表
+	
+	- 双向链表（Doubly Linked List）是一种常见的数据结构，它是由一系列结点（Node）组成的，每个结点包含三个部分：数据域、前驱指针和后继指针。其中，数据域存储结点的数据，前驱指针指向前一个结点，后继指针指向后一个结点。通过这种方式，双向链表可以实现双向遍历和插入、删除操作。 
+
+- 设计模式之模板设计模式
+	
+	- 模板设计模式是一种行为型设计模式，定义了一种算法的框架，并将某些步骤延迟到子类中事先，这种设计模式的主要目的是允许子类在不改变算法结构的情况下重新定义算法中的某些步骤。
+	- 优点是能够提高代码复用性和可维护性。
+
+## AQS 入门级别理论知识
+
+ **是什么？**
+	抽象的队列同步器
+
+![](imgs/Pasted%20image%2020230726160616.png)
+
+技术解释
+	- 是用来实现锁或者其他同步器组件的公共基础部分的抽象实现
+	- 是重量级基础框架及整个 JUC 体系的基石，**主要用于解决锁分配给”谁“的问题。**
+	- 整体就是一个抽象的 FIFO 队列来完成资源获取线程的排队工作，并通过一个 int 类变量表示持有锁的状态 
+![](imgs/Pasted%20image%2020230726160652.png)
+
+![](imgs/Pasted%20image%2020230726160655.png)
+
+**AQS 为什么是 JUC 内容中最重要的基石**
+依靠 AQS 的类
+底层都是 AQS 实现的
+![](imgs/Pasted%20image%2020230726161437.png)
+
+- 进一步理解锁和同步器的关系
+	- 锁，面向锁的使用者：定义了程序员和锁交互的使用层API，隐藏了实现细节，你调用即可
+	- 同步器，面向锁的实现者：Java 并发大神 DoungLee，提出了统一规范并简化了锁的实现，将其抽象出来，屏蔽了同步状态管理、同步队列的管理和维护、阻塞线程排队和通知、唤醒机制等，是一切锁和同步组件实现的----公共基础部分
+
+**能干嘛**
+**加锁会导致阻塞**------有阻塞就需要排队，实现排队必然需要队列
+	- 抢到资源的线程直接使用处理业务，抢不到资源的必然涉及一种排队等候机制。抢占失败的线程继续去等待（类似于银行办理窗口都满了，暂时没有受理窗口的顾客只能去候客区排队等待），但等候线程仍然保留获取锁的可能且获取锁流程仍在继续（候客区的顾客也在等着叫号，轮到了再去受理窗口办理业务） 
+	- 既然说到了排队等候机制，那么就一定会有某种队列形成，这样的队列是什么数据结构呢？
+		- 如果共享资源被占用，就需要一定的阻塞等待唤醒机制来保证锁分配。这个机制主要用的是**CLH 队列的变体实现的**，将暂时获取不到锁的线程加入到队列中，这个队列就是**AQS 同步队列的抽象表现**。它将要请求共享资源的线程及自身的等待状态封装成队**列的节点对象（Node）**，通过 CAS、自旋以及 LockSupport.park ()的方式，维护着**state 变量的状态**，使其达到同步的状态。
+
+![](imgs/Pasted%20image%2020230726163256.png)
+
+### 总结
+AQS 同步队列的基本结构
+![](imgs/Pasted%20image%2020230726163314.png)
+
+AQS 是维护堵塞线程的排序队列，底层是 FIFO 队列和维护着 state 变量的状态，对锁的控制。
+
+## AQS 源码分析前置知识储备
+AQS 内部结构图
+![](imgs/Pasted%20image%2020230726163449.png)
+
+- AQS 的 int 类型变量 state
+	
+	- AQS的同步状态State成员变量
+	- ![](https://cdn.nlark.com/yuque/0/2023/png/35653686/1681465319285-a6cf8348-bcf6-47ac-aba9-2262ba1a304c.png)
 
 
+- 银行办理业务的受理窗口状态
+	- 零就是没人，自由状态可以去办理
+	- 大于等于1，有人占用窗口，等着去 
+
+- AQS 的 CLH 队列
+	
+	- CLH（三个大牛的名字组成）队列为一个双向队列
+	- ![](https://cdn.nlark.com/yuque/0/2023/png/35653686/1681465485315-4d8ae807-6640-4be3-acd1-647ebfed99da.png)
+	- 银行候客区的等待顾客
+
+- 小总结
+	
+	- **有阻塞就需要排队，实现排队必然需要队列**
+	- State 变量+CLH 双端队列 
 
 
+**AQS 内部体系架构----内部类 Node**
+- Node 的 int 变量
+	
+	- Node的等待状态waitState成员变量
+		- ![](https://cdn.nlark.com/yuque/0/2023/png/35653686/1681465816752-04931358-ef60-4cf5-922c-f0190eb6e969.png)
+	
+	- 说人话
+		- 等候区其他顾客（其他线程）的等待状态
+		- 队列中每个排队的个体就是一个 Node
+
+- Node 此类的讲解
+	
+	- 内部结构
+	- ![](imgs/Pasted%20image%2020230726163719.png)
+	
+	- 属性说明
+	- ![](imgs/Pasted%20image%2020230726163728.png)
+
+## AQS 源码深度讲解和分析
+Lock 接口的实现类，基本都是通过聚合了一个队列同步器的子类完成线程访问控制的
+![](imgs/Pasted%20image%2020230726181037.png)
+
+公平锁和非公平锁的 lock ()方法唯一的区别就在于**公平锁在获取同步状态时多了一个限制条件：hasQueuedPredecessors ()-----公平锁加锁时判断等待队列中是否存在有效节点的方法**
 
