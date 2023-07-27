@@ -2762,3 +2762,142 @@ Lock 接口的实现类，基本都是通过聚合了一个队列同步器的子
 
 公平锁和非公平锁的 lock ()方法唯一的区别就在于**公平锁在获取同步状态时多了一个限制条件：hasQueuedPredecessors ()-----公平锁加锁时判断等待队列中是否存在有效节点的方法**
 
+# ReentrantLock 、ReentrantReadWriteLock、StampedLock 讲解
+## 面试题
+- 你知道 Java 里面有那些锁
+- 你说说你用过的锁，锁饥饿问题是什么？
+- 有没有比读写锁更快的锁
+- StampedLock知道吗？（邮戳锁/票据锁）
+- ReentrantReadWriteLock 有锁降级机制，你知道吗？
+
+## ReentrantReadWriteLock
+- 读写锁说明
+	- 一个资源能够被多个读线程访问，或者被一个写线程访问，但是不能同时存在读写线程
+	
+	- 再说说演变
+		- 无锁无序->加锁->读写锁->邮戳锁
+ 
+- 读写锁意义和特点
+	
+	- **它只允许读读共存，而读写和写写依然是互斥的**，大多实际场景是**”读/读“线程间不存在互斥关系**，只有”读/写“线程或者”写/写“线程间的操作是需要互斥的，因此引入了 ReentrantReadWriteLock
+	- 一个ReentrantReadWriteLock同时只能存在一个写锁但是可以存在多个读锁，但是不能同时存在写锁和读锁，**也即资源可以被多个读操作访问，或一个写操作访问**，但两者不能同时进行。
+	- 只有在读多写少情景之下，读写锁才具有较高的性能体现。
+
+## 特点
+- 可重入
+- 读写兼顾
+- 结论：**一体两面，读写互斥，读读共享，读没有完成的时候其他线程写锁无法获得**
+- 锁降级：
+	
+	- 将写锁降级为读锁------>遵循获取写锁、获取读锁再释放写锁的次序，写锁能够降级为读锁
+	- 如果一个线程持有了写锁，在没有释放写锁的情况下，它还可以继续获得读锁。这就是写锁的降级，降级成为了读锁。
+	- **如果释放了写锁，那么就完全转换为读锁**
+	- **如果有线程在读，那么写线程是无法获取写锁的**，是悲观锁的策略
+![](imgs/Pasted%20image%2020230727133250.png)
+
+一句话概括，如果现在是写锁，在还没有释放写锁的请情况下，他可以继续获得读锁，若释放了写锁，那么就成为了读锁。
+如果现在是读锁，在没有释放的情况下，无法获得写锁。
+当一个读锁没有释放时，其他写锁是获取不到的，但是其他读锁可以读
+
+## 邮戳锁 StampedLock
+**是什么**
+StampedLock 是 JDK1.8中新增的一个读写锁，也是对 JDK1.5中的读写锁 ReentrantReadWriteLock 的优化
+
+stamp 代表了锁的状态。当 stamp 返回零时，表示线程获取锁失败，并且当释放锁或者转换锁的时候，都要传入最初获取的 stamp 值。
+
+**它是由饥饿问题引出**
+- 锁饥饿问题：
+	
+	- ReentrantReadWriteLock 实现了读写分离，**但是一旦读操作比较多的时候**，想要获取写锁就变得比较困难了，因此当前有可能会一直存在读锁，而无法获得写锁。
+	- 1000 个线程，999 个读锁，1 个写锁，可能一直获得不到写锁，都是读锁在操作。
+
+- 如何解决锁饥饿问题：
+	
+	- 使用”公平“策略可以一定程度上缓解这个问题
+	- 使用”公平“策略是以牺牲系统吞吐量为代价的
+	- StampedLock 类的乐观读锁方式--->采取乐观获取锁，其他线程尝试获取写锁时不会被阻塞，在获取乐观读锁后，还需要对结果进行校验
+
+**StampedLock 的特点**
+- 所有**获取锁**的方法，都返回一个邮戳，stamp 为零表示失败，其余都表示成功
+- 所有**释放锁**的方法，都需要一个邮戳，这个 stamp 必须是和成功获取锁时得到的 stamp 一致
+- StampedLock是不可重入的，**危险**（如果一个线程已经持有了写锁，在去获取写锁的话会造成死锁）
+- StampedLock有三种访问模式：
+	
+	- Reading（读模式悲观）：功能和ReentrantReadWriteLock的读锁类似
+	- Writing（写模式）：功能和ReentrantReadWriteLock的写锁类似
+	- Optimistic reading（乐观读模式）：无锁机制，类似与数据库中的乐观锁，支持读写并发，很乐观认为读时没人修改，假如被修改在实现升级为悲观读模式
+
+- **一句话：读的过程中也允许写锁介入**
+
+
+**- 乐观读模式----读的过程中也允许写锁介入**
+```java
+/**  
+* @author ZhangMinlei  
+* @description  
+* @date 2023-07-27 15:22  
+*/  
+public class StampedLockDemo {  
+static int number = 37;  
+static StampedLock stampedLock = new StampedLock();  
+  
+int result = 0;  
+  
+public void read() {  
+long l = stampedLock.tryOptimisticRead();  
+result = number;  
+// validate 如果当前读没有其他写线程修改则返回true 反之为 falseSystem.out.println("3秒前" + stampedLock.validate(l));  
+  
+try {  
+TimeUnit.SECONDS.sleep(3);  
+} catch (InterruptedException e) {  
+e.printStackTrace();  
+}  
+System.out.println("3秒后" + stampedLock.validate(l));  
+  
+if (!stampedLock.validate(l)) {  
+// 有其他写在读的过程中修改了 ，  
+long l1 = stampedLock.readLock();  
+System.out.println("升级为悲观读，读的过程中，不允许其他写操作进来");  
+result = number;  
+System.out.println("result = " + result);  
+stampedLock.unlockRead(l1);  
+}  
+System.out.println(Thread.currentThread().getName() + "线程result = " + result);  
+}  
+  
+public void write() {  
+long l = stampedLock.writeLock();  
+System.out.println("写操作准备修改");  
+result = number + 13;  
+stampedLock.unlockWrite(l);  
+System.out.println(Thread.currentThread().getName() + "\t" + "写线程结束修改");  
+}  
+  
+public static void main(String[] args) throws InterruptedException {  
+StampedLockDemo stampedLockDemo = new StampedLockDemo();  
+new Thread(stampedLockDemo::read, "t1").start();  
+  
+TimeUnit.SECONDS.sleep(2);  
+  
+new Thread(stampedLockDemo::write, "t2").start();  
+System.out.println("result = "+stampedLockDemo.result);  
+}  
+}
+
+3秒前true
+result = 37
+写操作准备修改
+t2	写线程结束修改
+3秒后false
+升级为悲观读，读的过程中，不允许其他写操作进来
+result = 37
+t1线程result = 37
+
+```
+
+## StampedLock的缺点
+- StampedLock 不支持重入，没有 Re 开头
+- StampedLock的悲观读锁和写锁都不支持条件变量，这个也需要主要
+- 使用StampedLock一定不要调用中断操作，即不要调用interrupt()方法
+
