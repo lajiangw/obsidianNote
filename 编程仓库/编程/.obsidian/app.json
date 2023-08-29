@@ -24,5 +24,6 @@
   "showIndentGuide": true,
   "useMarkdownLinks": true,
   "newLinkFormat": "relative",
-  "defaultViewMode": "preview"
+  "defaultViewMode": "preview",
+  "focusNewTab": true
 }

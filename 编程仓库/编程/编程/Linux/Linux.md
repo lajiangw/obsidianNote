@@ -1994,7 +1994,7 @@ bt 宝塔 Linux 面板是提升运维效率的服务器管理软件，支持一�
 username: zml001
 password: 123456
 ```
-0gQhrpyW?j (y
+
 
 安装的软件：
 **Tomcat

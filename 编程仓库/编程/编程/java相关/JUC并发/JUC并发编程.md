@@ -1499,6 +1499,10 @@ volatile 实现禁止重拍序的底层是内存屏障。
 - volatile读之后的操作，都禁止重排序到volatile之前
 - volatile 写之后 volatile 读，禁止重排序
 
+主内存和本地内存
+
+![](imgs/Pasted%20image%2020230805145538.png)
+
 # CAS
 ## 原子类
 Java. util. concurrent. atomic
@@ -1596,7 +1600,7 @@ JDK 提供的 CAS 机制，在汇编层级会禁止变量两侧的指令优化�
 
 ## 原子引用
 ![](imgs/Pasted%20image%2020230723182017.png)
-讲一个对象，封装为原子对象，可以使用 cas 的方法。
+将一个对象，封装为原子对象，可以使用 cas 的方法。
 
 使用演示
 ```java
@@ -1707,7 +1711,7 @@ lock.unlock();
 
 
 ## ABA 问题解决方案
-带有戳记流水号的原子引用类
+使用带有戳记流水号的原子引用类
 ![](imgs/Pasted%20image%2020230723210323.png)
 
 AtomicStampedReference带戳记流水的简单演示（单线程）：
@@ -2901,3 +2905,6 @@ t1线程result = 37
 - StampedLock的悲观读锁和写锁都不支持条件变量，这个也需要主要
 - 使用StampedLock一定不要调用中断操作，即不要调用interrupt()方法
 
+
+# 线程池的任务执行过程
+![](imgs/Pasted%20image%2020230810175406.png)
