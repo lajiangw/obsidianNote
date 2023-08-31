@@ -1196,7 +1196,7 @@ S: de0b393c17e452d856f6de2b348e9ca4e5aa4002 192.168.xxx.xxx:6385
 [OK] All 16384 slots covered.
 ```
 
-## 主从扩容缩容
+## 主从扩容
 假如因为业务量激增，需要向当前3主3从的集群中再加入1主1从两个节点。
 
 1. 启动2台新的容器节点
@@ -1208,5 +1208,334 @@ docker run -d --name redis-node-7 --net host --privileged=true -v /app/redis-clu
 docker run -d --name redis-node-8 --net host --privileged=true -v /app/redis-cluster/share/redis-node-8:/data redis:6.0.8 --cluster-enabled yes --appendonly yes --port 6388
 ```
 
+2. 进入6387（节点7）容器内部
+```
+docker exec -it redis-node-7 /bin/bash
+```
 
+3. 将6387作为 master 加入集群
+```
+# redis-cli --cluster add-node 本节点地址 要加入的集群中的其中一个节点地址
+redis-cli --cluster add-node 192.168.200.130:6387 192.168.200.130:6381
+```
+
+4. 检查当前集群状态
+```
+redis-cli --cluster check 192.168.200.130:6381
+```
+
+可以发现，6371节点已经作为 master 加入了集群，但是该节点没有被分配槽位。
+5. 重新分配集群的槽位
+```
+redis-cli --cluster reshard 192.168.200.130:6381
+```
+
+redis 经过槽位检查后，会提示需要分配的槽位数量：  
+例如，我们现在是4台master，我们想要给node7分配4096个槽位，这样每个节点都是4096个槽位。  
+输入`4096`后，会让输入要接收这些哈希槽的节点ID，填入node7的节点ID即可。（就是节点信息中很长的一串十六进制串）。  
+然后会提示，询问要从哪些节点中拨出一部分槽位凑足4096个分给Node7。一般选择 `all`，即将之前的3个主节点的槽位都均一些给Node7，这样可以使得每个节点的槽位数相等均衡。  
+输入`all`之后，redis会列出一个计划，内容是自动从前面的3台master中拨出一部分槽位分给Node7的槽位，需要确认一下分配的计划。  
+输入 `yes` 确认后，redis 便会自动重新洗牌，给 Node7分配槽位。 
+
+重新分配完成后，可以进行集群信息检查，查看分配结果：、
+```
+redis-cli --cluster check 192.168.xxx.xxx:6381
+```
+
+可以发现重新洗牌后的槽位分配为：、
+```
+节点1：[1365-5460]（供4096个槽位），，，分配前为[0-5460]（共5461个槽位）
+节点2：[6827-10922]（共4096个槽位），，，分配前为[5461-10922]（共5461个槽位）
+节点3：[12288-16383]（共4096个槽位），，，分配前为[10923-16383]（共5462个槽位）
+
+节点7：[0-1364],[5461-6826],[10923-12287]（共4096个槽位），从每个节点中匀出来了一部分给了节点7
+```
+
+因为可能有些槽位中已经存储了 `key`，完全的重新洗牌重新分配的成本过高，所以 redis 选择从前3个节点中匀出来一部分给节点7
+
+为主节点6387分配从节点6388：
+```
+redis-cli --cluster add-node 192.168.xxx.xxx:6388 192.168.xxx.xxx:6381 --cluster-slave --cluster-master-id node7节点的十六进制编号字符串
+```
+
+## 主从缩容
+假如业务高峰期过去，需要将4主4从重新缩容到3主3从。即从集群中移除 node8和 node7.
+
+首先删除从节点6388：
+1. 进入容器节点1
+```
+docker exec -it redis-node-1 /bin/bash
+```
+
+2. 检查容器状态，获取6388的节点编号
+```
+1582e58d95f12b0763fd6abf61668ce562eb6850
+```
+
+3. 将6388从集群中移除
+```
+redis-cli --cluster del-node 192.168.xxx.xxx:6388 6388节点编号
+```
+
+对 node7重新分配哈希槽：
+1. 对集群重新分配哈希槽
+```
+redis-cli --cluster reshard 192.168.xxx.xxx:6381
+```
+
+2. redis 经过槽位检查后，会提示需要分配的槽位数量：
+```
+How many slots do you want to move (from 1 to 16384)?
+```
+
+如果我们想直接把 node7的4096个哈希槽全部分给某个节点，可以直接输入4096。  
+输入`4096`后，会让输入要接收这些哈希槽的节点ID。假如我们想把这4096个槽都分给Node1，直接输入node1节点的编号即可。  
+然后会提示，询问要从哪些节点中拨出一部分槽位凑足4096个分给Node1。这里我们输入node7的节点编号，回车后输入`done`。
+
+node7上面没有了哈希槽，此时便可以将 node7从集群中移除。（如果 node7上面有哈希槽，直接从集群中移除会报错） 
+
+```
+redis-cli --cluster del-node 192.168.xxx.xxx:6387 node7节点编号
+```
+
+# Dockerfile
+Dockerfile 是用来构建 Docker 镜像的文本文件，是由一条条构建镜像所需的指令和参数构成的脚本。 
+
+构建步骤：
+1. 编写 Dockerfile 文件
+
+2. `docker build`命令构建镜像
+
+3. `docker run` 依据镜像运行容器实例
+
+## 构建过程
+Dockerfile编写：
+- 每条保留字指令都必须为大写字母，且后面要跟随至少一个参数
+- 指令按照从上到下顺序执行
+- `#`表示注释
+- 每条指令都会创建一个新的镜像层并对镜像进行提交
+
+Docker引擎执行Docker的大致流程：
+1. docker从基础镜像运行一个容器
+2. 执行一条指令并对容器做出修改
+3. 执行类似`docker commit`的操作提交一个新的镜像层
+4. docker再基于刚提交的镜像运行一个新容器
+5. 执行 Dockerfile 中的下一条指令，直到所有指令都执行完成
+
+## Dockerfile 保留字
+**FROM**
+基础镜像，当前新镜像是基于哪个镜像的，指定一个已经存在的镜像作为模板。Dockerfile 第一条必须是 `FROM`
+```
+# FROM 镜像名
+FROM hub.c.163.com/library/tomcat
+```
+
+**MAINTAINER**
+镜像维护者的姓名和邮箱地址
+```
+# 非必须
+MAINTAINER ZhangSan zs@163.com
+```
+
+**RUN**
+容器构建时需要运行的命令。
+有两种格式：
+- shell 格式
+```
+# 等同于在终端操作的shell命令
+# 格式：RUN <命令行命令>
+RUN yum -y install vim
+```
+
+- exec 格式
+```
+# 格式：RUN ["可执行文件" , "参数1", "参数2"]
+RUN ["./test.php", "dev", "offline"]  # 等价于 RUN ./test.php dev offline
+```
+
+`RUN` 是在 `docker build` 时运行
+
+ **EXPOSE**
+ 当前容器对外暴露出的端口。
+ ```
+ # EXPOSE 要暴露的端口
+# EXPOSE <port>[/<protocol] ....
+EXPOSE 3306 33060
+```
+
+ WORKDIR
+指定在创建容器后，终端默认登录进来的工作目录。
+```
+ENV CATALINA_HOME /usr/local/tomcat
+WORKDIR $CATALINA_HOME
+```
+
+**USER**
+指定该镜像以什么样的用户去执行，如果不指定，默认是 `root`。（一般不修改该配置）
+```
+# USER <user>[:<group>]
+USER patrick
+```
+
+**ENV**
+用来在构建镜像过程中设置环境变量
+这个环境变量可以在后续的任何`RUN`指令或其他指令中使用
+```
+# 格式 ENV 环境变量名 环境变量值
+# 或者 ENV 环境变量名=值
+ENV MY_PATH /usr/mytest
+
+# 使用环境变量
+WORKDIR $MY_PATH
+```
+
+ **VOLUME**
+容器数据卷，用于数据保存和持久化工作。类似于 `docker run` 的 `-v` 参数。
+```
+# VOLUME 挂载点
+# 挂载点可以是一个路径，也可以是数组（数组中的每一项必须用双引号）
+VOLUME /var/lib/mysql
+```
+
+
+**ADD**
+将宿主机目录下（或远程文件）的文件拷贝进镜像，且会自动处理 URL 和解压 tar 压缩包。
+
+**COPY**
+类似 `ADD`，拷贝文件和目录到镜像中。
+将从构建上下文目录中 `<源路径>` 的文件目录复制到新的一层镜像内的 `<目标路径>` 位置。
+```
+COPY src dest
+COPY ["src", "dest"]
+# <src源路径>：源文件或者源目录
+# <dest目标路径>：容器内的指定路径，该路径不用事先建好。如果不存在会自动创建
+```
+
+**CMD**
+指定容器启动后要干的事情。
+有两种格式：
+- shell 格式
+```
+# CMD <命令>
+CMD echo "hello world"
+```
+- exec 格式
+```
+# CMD ["可执行文件", "参数1", "参数2" ...]
+CMD ["catalina.sh", "run"]
+```
+
+- 参数列表格式
+```
+# CMD ["参数1", "参数2" ....]，与ENTRYPOINT指令配合使用
+```
+
+Dockerfile 中如果出现多个 `CMD` 指令，只有最后一个生效。`CMD` 会被 `docker run` 之后的参数替换。
+例如，对于 tomcat 镜像，执行以下命令会有不同的效果：
+```
+# 因为tomcat的Dockerfile中指定了 CMD ["catalina.sh", "run"]
+# 所以直接docker run 时，容器启动后会自动执行 catalina.sh run
+docker run -it -p 8080:8080 tomcat
+
+# 指定容器启动后执行 /bin/bash
+# 此时指定的/bin/bash会覆盖掉Dockerfile中指定的 CMD ["catalina.sh", "run"]
+docker run -it -p 8080:8080 tomcat /bin/bash
+```
+
+ **ENTRYPOINT**
+ 用来指定一个容器启动时要运行的命令。
+ 类似于 `CMD` 命令，但是 `ENTRYPOINT` 不会被 `docker run` 后面的命令覆盖，这些命令参数会被当做参数送给 `ENTRYPOINT` 指令指定的程序。 
+`ENTRYPOINT` 可以和 `CMD` 一起用，一般是可变参数才会使用 `CMD`，这里的 `CMD` 等于是在给 `ENTRYPOINT` 传参。
+
+当指定了 `ENTRYPOINT` 后，`CMD` 的含义就发生了变化，不再是直接运行期命令，而是将 `CMD` 的内容作为参数传递给 `ENTRYPOINT` 指令，它们两个组合会变成 `<ENTRYPOINT> "<CMD>"`。
+```
+FROM nginx
+
+ENTRYPOINT ["nginx", "-c"]  # 定参
+CMD ["/etc/nginx/nginx.conf"] # 变参
+```
+
+对于此 Dockerfile，构建成镜像 `nginx:test` 后，如果执行；
+- `docker run nginx test`，则容器启动后，会执行 `nginx -c /etc/nginx/nginx.conf`
+
+- `docker run nginx:test /app/nginx/new.conf`，则容器启动后，会执行 `nginx -c /app/nginx/new.conf`
+
+
+##  构建镜像
+创建名称为 `Dockerfile` 的文件，示例：
+```
+FROM ubuntu
+MAINTAINER lee<lee@xxx.com>
+
+ENV MYPATH /usr/local
+WORKDIR $MYPATH
+
+RUN apt-get update
+RUN apt-get install net-tools
+
+EXPOSE 80
+
+CMD echo $MYPATH
+CMD echo "install ifconfig cmd into ubuntu success ....."
+CMD /bin/bash
+```
+
+编写完成之后，将其构建成 docker 镜像。
+```
+# 注意：定义的TAG后面有个空格，空格后面有个点
+# docker build -t 新镜像名字:TAG .
+docker build -t ubuntu:1.0.1 .
+```
+
+## 虚悬镜像
+虚悬镜像：仓库名、标签名都是 `<none>` 的镜像，称为 dangling images（虚悬镜像）。
+
+在构建或者删除镜像时可能由于一些错误导致出现虚悬镜像。
+
+```
+# 构建时候没有镜像名、tag
+docker build .
+```
+
+列出 docker 中的虚悬镜像：
+```
+docker image ls -f dangling=true
+```
+
+虚悬镜像一般是因为一些错误而出现的，没有存在价值，可以删除：
+```
+# 删除所有的虚悬镜像
+docker image prune
+```
+
+# Docker 发布微服务
+搭建一个简单的微服务 demo，并打包成 jar 文件，上传到 linux。
+
+编写 dockerfile
+```
+FROM openjdk:8-oracle
+MAINTAINER lee
+
+# 在主机 /var/lib/docker目录下创建一个临时文件，并链接到容器的 /tmp
+VOLUME /tmp
+
+# 将jar包添加到容器中，并命名为 springboot_docker.jar
+ADD dockerdemo2-1.0-SNAPSHOT.jar /springboot_docker.jar
+# 运行jar包
+RUN bash -c 'touch /springboot_docker.jar'
+ENTRYPOINT ["java", "-jar", "/springboot_docker.jar"]
+
+# SpringBoot项目配置的端口号为6001，需要将6001暴露出去
+EXPOSE 6001
+```
+
+3. 构建镜像
+```
+docker build -t springboot_docker:1.0 .
+```
+
+4. 启动容器：
+```
+docker run -d -p 6001:6001 --name springboot springboot_docker:1.0
+```
 
