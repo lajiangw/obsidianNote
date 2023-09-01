@@ -1539,3 +1539,230 @@ docker build -t springboot_docker:1.0 .
 docker run -d -p 6001:6001 --name springboot springboot_docker:1.0
 ```
 
+# Docker 网络
+docker 安装并启动服务后，会在宿主机中添加一个虚拟网卡。
+在 Docker 服务启动前，使用 `ifconfig` 或 `ip addr` 查看网卡信息：
+- `ens33` 或 `eth0`：本机网卡
+- `lo`：本机回环网络网卡
+- 可能有 `virbr0`（CentOS 安装时如果选择的有相关虚拟化服务，就会多一个以网桥连接的私网地址的 `virbr0` 网卡，作用是为连接虚拟网卡提供 NAT 访问外网的功能。如果要移除该服务，可以使用 `yum remove libvirt-libs.x86_64`）
+
+使用 `systemctl start docker` 启动 Docker 服务后，会多出一个 `docker0` 网卡。
+
+作用：
+- 容器间的互联和通信以及端口映射
+- 容器IP变动时候可以通过服务名直接网络通信而不受到影响
+
+Docker 容器的网络隔离，是通过 Linux 内核特性 `namespace` 和 `cgroup` 实现的。
+
+## docker 网络命令
+查看 Docker 网络模式：
+```
+docker network ls
+```
+
+如果没有修改过 docker network，则默认有3个网络模式：
+- `bridge`
+- `host`
+- `none`
+
+添加 Docker 网络：
+```
+docker network add xxx
+```
+
+删除 Docker 网络：
+```
+docker network rm xxx
+```
+
+查看网络元数据：
+```
+docker network inspect xxx
+```
+
+删除所有无效的网络：
+```
+docker network prune
+```
+
+##  Docker 网络模式
+Docker 的网络模式：
+![](imgs/Pasted%20image%2020230901123247.png)
+
+查看某个容器的网络模式：
+```
+# 通过inspect获取容器信息，最后20行即为容器的网络模式信息
+docker inspect 容器ID | tail -n 20
+```
+
+## docker0
+Docker 服务默认会创建一个 `docker0` 网桥（其上有一个 `docker0` 内部接口），该桥接网络的名称为 `docker0`，它在内核层连通了其他的物理或虚拟网卡，这就将所有容器和本地主机都放到同一个物理网络。
+Docker 默认指定了 `docker0` 接口的 IP 地址和子网掩码，让主机和容器之间可以通过网桥互相通信。
+
+Docker 默认指定了 `docker0` 接口的 IP 地址和子网掩码，让主机和容器之间可以通过网桥互相通信。
+```
+docker network inspect bridge | grep name
+```
+
+可以看到其名称为 `docker0`。
+
+##  bridge 模式
+Docker 使用 Linux 桥接，在宿主机虚拟一个 `Docker` 容器网桥（`docker0`），Docker 启动一个容器时会根据 `Docker` 网桥的网段分配给容器一个 IP 地址，称为 `Container-IP`，同时 Docker 网桥是每个容器的默认网关。因为在同一个宿主机内的容器接入同一个网桥，这样容器之间就能够通过容器的 `Container-IP` 直接通信。 
+
+`docker run` 的时候，没有指定 `--network` 的话，默认使用的网桥模式就是 `bridge`，使用的就是 `docker0`。在宿主机 `ifconfig` 就苦役看到 `docker0` 和自己 `create` 的 `network`。 
+网桥 `docker0` 创建一对对等虚拟设备接口，一个叫 `veth`，另一个叫 `eth0`，成对匹配： 
+整个宿主机的网桥模式都是 `docker0`，类似一个交换机有一堆接口，每个接口叫 `veth`，在本地主机和容器内分别创建一个虚拟接口，并让他们彼此联通（这样一对接口叫做 `veth pair`）。 
+每个容器实例内部也有一块网卡，容器内的网卡接口叫做 `eth0`。 
+`docker0` 上面的每个 `veth` 匹配某个容器实例内部的 `eth0`，两两配对，一一匹配。 
+每个容器之间是互不干扰的。
+![](imgs/Pasted%20image%2020230901161934.png)
+##  host 模式
+直接使用宿主机的 IP 地址与外界进行通信，不再需要额外进行 NAT 转换。
+
+容器将不会获得一个独立的 Network Namespace，而是和宿主机共用一个 Network space。
+
+容器将不会虚拟出自己的网卡，而是直接使用宿主机的 IP 和端口。
+
+![](https://cdn.nlark.com/yuque/0/2022/webp/12911942/1652093680434-8180b11d-89f2-4bb6-a485-b3c22bd28688.webp)
+
+如果在 `docker run` 命令中同时使用了 `--network host` 和 `-p` 端口映射，例如：
+
+```
+docker run -p 8082:8080 --network host tomcat
+```
+
+会出现一个警告
+```
+WARNING: Published ports are discarded when using host network mode
+```
+因为此时已经使用了 `host` 模式，本身就是直接使用的宿主机的 IP 和端口，此时的 `-p` 端口映射就没有了意义，也不会生效，端口号还是会以主机端口号为主。 
+正确做法是：不再进行 `-p` 端口映射，或者改用 `bridge` 模式 
+##  none 模式
+禁用网络功能。
+在 `none` 模式下，并不为 docker 容器进行任何网络配置。进入容器内，使用 `ip addr` 查看网卡信息，只能看到 `lo`（本地回环网络 `127.0.0.1` 网卡）。 
+
+## container 模式
+新建的容器和已经存在的一个容器共享网络 IP 配置，而不是和宿主机共享。 
+新创建的容器不会创建自己的网卡、IP，而是和一个指定的容器共享 IP、端口范围。两个容器除了网络共享，其他的如文件系统、进程列表依然是隔离的。 
+
+![](imgs/Pasted%20image%2020230901162708.png)
+
+示例：
+```
+docker run -it --name alpine1 alpine /bin/sh
+
+# 指定和 alpine1 容器共享网络
+docker run -it --netrowk container:alpine1 --name alpine2 alpine /bin/sh
+```
+此时使用 `ip addr` 查看两台容器的网络，会发现两台容器的 `eth0` 网卡内的 IP 等信息完全相同。
+
+如果关掉了 `alpine1` 容器，因为 `alpine2` 的网络使用的 `alpine1` 共享网络，所以关掉 `alpin1` 后，`alpine2` 的 `eth0` 网卡也随之消失了。 
+
+## 自定义网络
+
+容器间的互联和通信以及端口映射。
+
+容器 IP 变动时候可以通过服务名直接网络通信而不受影响。（类似 Eureka，通过服务名直接互相通信，而不是写死 IP 地址）。
+
+docker 中还有一个 `--link` 进行容器网络互联，但是已经被标记为过时的，可能会在将来的版本中移除这个功能。推荐使用自定义网络替换 link。 
+
+自定义桥接网络（自定义网络默认使用的是桥接网络 `bridge`）：
+1. 新建自定义网络
+```
+docker network create tomcat_network
+```
+
+2. 查看网络列表
+```
+docker network ls
+```
+
+3. 创建容器时，指定加入我们自定义的网络中
+```
+docker run -d -p 8081:8080 --network tomcat_network --name tomcat1 tomcat:8.5-jdk8-corretto
+
+docker run -d -p 8082:8080 --network tomcat_network --name tomcat2 tomcat:8.5-jdk8-corretto
+```
+
+4. 此时进入 `tomcat1` 中，使用 `ping` 命令测试连接 `tomcat2` 容器名，发现可以正常连通
+```
+# 安装ifconfig命令
+yum install -y net-tools
+# 安装ip addr命令
+yum install -y iproute
+# 安装ping命令
+yum install -y iputils
+
+# 直接ping容器名，不需要ping IP地址
+ping tomcat2
+```
+
+## link 连接
+```
+# 启动一台mysql容器
+# --name 为容器指定一个别名
+docker run --name mysql-matomo -p 3308:3306 -e MYSQL_ROOT_PASSWORD=root -d mysql:8.0.28
+
+# 启动另一个容器，通过--link连接到mysql容器
+# --link 容器名称:本容器连接对方时的别名
+docker run -d -p 8888:80 --link mysql-matomo:db --name matomo matomo:4.9.0
+
+# 此时，在matomo容器中，便可以通过 db 这个hostname连接到mysql-matomo容器，而无须再通过ip
+# 连接地址：db:3306
+
+```
+
+# Docker-compose 容器编排
+Docker-compose 容器编排
+`Docker-Compose` 是 Docker 官方的开源项目，负责实现对 Docker 容器集群的快速编排。
+**`Docker-Compose` 可以管理多个 Docker 容器组成一个应用。需要定义一个 yaml 格式的配置文件 `docker-compose.yml`，配置好多个容器之间的调用关系，然后只需要一个命令就能同时启动/关闭这些容器。** 
+
+Docker 建议我们每个容器中只运行一个服务，因为 Docker 容器本身占用资源极少，所以最好是将每个服务单独的分割开来。但是如果我们需要同时部署多个服务，每个服务单独构建镜像构建容器就会比较麻烦。所以 Docker 官方推出了 `docker-compose` 多服务部署的工具。 
+Compose 允许用户通过一个单独的 `docker-compose.yml` 模板文件来定义一组相关联的应用容器为一个项目（`project`）。可以很容易的用一个配置文件定义一个多容器的应用，然后使用一条指令安装这个应用的所有依赖，完成构建。 
+
+核心概念：
+- 服务（`service`）：一个个应用容器实例
+- 工程（`project`）：由一组关联的应用容器组成的一个完整业务单元，在 `docker-compose.yml` 中定义 
+
+Compose 使用的三个步骤：
+1. 编写 Dockerfile 定义各个应用容器，并构建出对应的镜像文件
+2. 编写 `docker-compose.yml`，定义一个完整的业务单元，安排好整体应用中的各个容器服务 
+3. 执行 `docker-compose up` 命令，其创建并运行整个应用程序，完成一键部署上线 
+
+## 安装 Docker-Compose
+`Docker-Compose` 的版本需要和 Docker 引擎版本对应，可以参照官网上的[对应关系](https://docs.docker.com/compose/compose-file/compose-file-v3/)。
+
+安装 Compose：
+```
+# 例如从github下载 2.5.0版本的docker-compose
+# 下载下来的文件放到 /usr/local/bin目录下，命名为 docker-compose
+curl -L https://github.com/docker/compose/releases/download/v2.5.0/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
+
+# 添加权限
+chmod +x /usr/local/bin/docker-compose
+
+# 验证
+docker-compose version
+```
+
+卸载 Compose：直接删除 `usr/local/bin/docker-compose` 文件即可
+
+## 常用命令
+执行命令时，需要在对应的 `docker-compose.yml` 文件所在目录下执行。
+查看帮助：
+```
+docker-compose -h
+```
+
+创建并启动 `docker-compose` 服务：（类似 `docker run`）
+```
+docker-compose up
+
+# 后台运行
+docker-compose up -d
+```
+
+停止并删除容器、网络、卷、镜像：（类似 `docker stop` +  `docker rm`）
+```
+docker-compose down
+```
