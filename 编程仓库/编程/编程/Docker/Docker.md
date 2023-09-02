@@ -1766,3 +1766,276 @@ docker-compose up -d
 ```
 docker-compose down
 ```
+
+进入容器实例内部：
+```
+docker-compose exec <yml里面的服务id> /bin/bash
+```
+
+展示当前 `docker-compose` 编排过的运行的所有容器：
+```
+docker-compose ps
+```
+
+展示当前 `docker-compose` 编排过的容器进程：
+```
+docker-compose top
+```
+
+查看容器输出日志：
+```
+docker-compose log <yml里面的服务id>
+```
+
+检查配置：
+```
+docker-compose config
+
+# 有问题才输出
+docker-compose config -q
+```
+
+重启服务：
+```
+docker-compose restart
+```
+
+启动服务：（类似 `docker start`）
+```
+docker-compose start
+```
+
+停止服务：
+```
+docker-compose stop
+```
+
+##  compose 编排实例
+```
+# docker-compose文件版本号
+version: "3"
+
+# 配置各个容器服务
+services:
+  microService:
+    image: springboot_docker:1.0
+    container_name: ms01  # 容器名称，如果不指定，会生成一个服务名加上前缀的容器名
+    ports:
+      - "6001:6001"
+    volumes:
+      - /app/microService:/data
+    networks:
+      - springboot_network
+    depends_on:  # 配置该容器服务所依赖的容器服务
+      - redis
+      - mysql
+
+# 这里的redis可以代替ip，直接ping通，在我们微服务中，直接使用服务名调用即可。不需要关注id，不需要写死ip，增加容错。
+  redis:
+    image: redis:6.0.8
+    ports:
+      - "6379:6379"
+    volumes:
+      - /app/redis/redis.conf:/etc/redis/redis.conf
+      - /app/redis/data:data
+    networks:
+      - springboot_network
+    command: redis-server /etc/redis/redis.conf
+
+  mysql:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: '123456'
+      MYSQL_ALLOW_EMPTY_PASSWORD: 'no'
+      MYSQL_DATABASE: 'db_springboot'
+      MYSQL_USER: 'springboot'
+      MYSQL_PASSWORD: 'springboot'
+    ports:
+      - "3306:3306"
+    volumes:
+      - /app/mysql/db:/var/lib/mysql
+      - /app/mysql/conf/my.cnf:/etc/my.cnf
+      - /app/mysql/init:/docker-entrypoint-initdb.d
+    networks:
+      - springboot_network
+    command: --default-authentication-plugin=mysql_native_password # 解决外部无法访问
+
+networks:
+  # 创建 springboot_network 网桥网络
+  springboot_network:
+```
+
+编写完成 `docker-compose.yml` 后，进行语法检查：
+```
+# 进行语法检查
+docker-compose config -q
+```
+
+如果语法检查没有任何问题，进行创建、启动：
+```
+docker-compose up -d
+```
+
+# Portainer 轻量级图形化监控
+Portainer 是一款轻量级的应用，它提供了图形化界面，用于方便地管理 Docker 环境，包括单机环境和集群环境。 
+ 
+Portainer 分为开源社区版（CE 版）和商用版（BE 版/EE 版）。 
+
+## 安装
+Portainer 也是一个 Docker 镜像，可以直接使用 Docker 运行。
+
+```
+# 旧版镜像地址为portainer/portainer，从2022年1月标记为过期
+# 新版镜像地址为portainer/portainer-ce
+
+# --restart=always 如果Docker引擎重启了，那么这个容器实例也会在Docker引擎重启后重启，类似开机自启
+docker run -d -p 8000:8000 -p 9000:9000 --name portainer --restart=always -v /var/run/docker.sock:/var/run/docker.sock -v portainer_data:/data portainer/portainer-ce:2.13.0-alpine
+```
+
+启动之后，便可以在浏览器中进行访问：[http://xxx.xxx.xxx.xxx:9000](http://xxx.xxx.xxx.xxx:9000)
+
+首次进来时，需要创建 admin 的用户名（默认 `admin`）、密码（必须满足校验规则，例如 `portainer.io123`）。 
+
+选择 `local` 管理本地 docker，即可看到本地 Docker 的详细信息，包括其中的镜像（images）、容器（containers）、网络（networks）、容器卷（volumes）、compose 编排（stacks）等等。 
+
+# CIG 重量级监控
+
+通过 `docker stats` 命令可以很方便的查看当前宿主机上所有容器的 CPU、内存、网络流量等数据，可以满足一些小型应用。 
+
+但是 `docker stats` 统计结果只能是当前宿主机的全部容器，数据资料是实时的，没有地方存储、没有健康指标过线预警等功能。 
+
+CAdvisor（监控收集） + InfluxDB（存储数据） + Granfana（展示图表），合称 `CIG`。 
+![](imgs/Pasted%20image%2020230902132438.png)
+
+## CAdvisor
+CAdvisor 是一个容器资源监控工具，包括容器的内存、CPU、网络 IO、磁盘 IO 等监控，同时提供了一个 Web 页面用于查看容器的实时运行状态。 
+
+CAdvisor 默认存储2分钟的数据，而且只是针对单物理机。不过 CAdvisor 提供了很多数据集成接口，支持 InfluxDB、Redis、Kafka、Elasticsearch 等集成，可以加上对应配置将监控数据发往这些数据库存储起来。 
+
+CAdvisor主要功能：
+- 展示Host和容器两个层次的监控数据
+- 展示历史变化数据
+
+## InfluxDB
+InfluxDB 是用 Go 语言编写的一个开源分布式时序、事件和指标数据库，无需外部依赖。 
+
+CAdvisor 默认只在本机保存2分钟的数据，为了持久化存储数据和统一收集展示监控数据，需要将数据存储到 InfluxDB 中。InfluxDB 是一个时序数据库，专门用于存储时序相关数据，很适合存储 CAdvisor 的数据。而且 CAdvisor 本身已经提供了 InfluxDB 的集成方法，在启动容器时指定配置即可。 
+
+InfluxDB 主要功能：
+- 基于时间序列，支持与时间有关的相关函数（如最大、最小、求和等）
+- 可度量性，可以实时对大量数据进行计算
+- 基于事件，支持任意的事件数据
+
+## Granfana
+Grafana 是一个开源的数据监控分析可视化平台，支持多种数据源配置（支持的数据源包括 InfluxDB、MySQL、Elasticsearch、OpenTSDB、Graphite 等）和丰富的插件及模板功能，支持图表权限控制和报警。 
+
+Granfana 主要功能：
+- 灵活丰富的图形化选项
+- 可以混合多种风格
+- 支持白天和夜间模式
+- 多个数据源
+
+
+# 安装部署
+1. 编写 `docker-compose.yml` 服务编排文件
+```
+version: '3.1'
+
+volumes:
+  grafana_data: {}
+
+services:
+  influxdb:
+	# tutum/influxdb 相比influxdb多了web可视化视图。但是该镜像已被标记为已过时
+    image: tutum/influxdb:0.9
+    restart: always
+    environment:
+      - PRE_CREATE_DB=cadvisor
+    ports:
+      - "8083:8083"         # 数据库web可视化页面端口
+      - "8086:8086"         # 数据库端口
+    volumes:
+      - ./data/influxdb:/data
+
+  cadvisor:
+    image: google/cadvisor:v0.32.0
+    links:
+      - influxdb:influxsrv
+    command:
+      - -storage_driver=influxdb
+      - -storage_driver_db=cadvisor
+      - -storage_driver_host=influxsrv:8086
+    restart: always
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+
+  grafana:
+    image: grafana/grafana:8.5.2
+    user: '104'
+    restart: always
+    links:
+      - influxdb:influxsrv
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    environment:
+      - HTTP_USER=admin
+      - HTTP_PASS=admin
+      - INFLUXDB_HOST=influxsrv
+      - INFLUXDB_PORT=8086
+```
+
+2. 检查语法
+```
+docker-compose config -q
+```
+
+3. 创建并启动容器
+```
+docker-compose up -d
+```
+
+容器启动之后：
+
+1. 在浏览器打开 InfluxDB 数据库的页面： http://xxx.xxx.xxx.xxx:8083 ，使用命令查看当前数据库中的数据库实例：
+```
+SHOW DATABASES
+```
+
+查看其中是否自动创建了我们在配置文件中配置的 `cadvisor` 数据库实例
+2. 在浏览器打开CAdvisor页面：http://xxx.xxx.xxx.xxx8080/，查看当前docker中的cpu、内存、网络IO等统计信息
+
+3. 在浏览器打开 Grafana 页面： http://xxx.xxx.xxx.xxx:3000/ ，默认用户名密码是：`admin` / `admin`。
+
+## Grafana 配置
+
+### 添加数据源
+
+在`Configuration`（小齿轮）选项卡中，选择`Data Sources`，添加一个InfluxDB数据源：
+- name：自定义一个数据源名称，例如`InfluxDB`
+- Query Language：查询语言，默认`InfluxQL`即可
+- URL：根据compose中的容器服务名连接，`http://influxdb:8086`
+- database：我们在InfluxDB中创建的数据库实例，`cadvisor`
+- User：InfluxDB的默认用户，`root`
+- Password：`root`
+
+
+保存并测试，可以连通即可
+## 添加工作台
+
+1. 在`Create`（加号）选项卡中，选择创建 `Dash Board`工作台。右上角配置中可以配置创建出来的工作台的标题、文件夹等信息。
+2. 在创建出来的工作台中，选择 `Add panel` 中的 `Add a new panel` 添加一个新的面板。
+	
+	1. 在右上角`Time series`（时序图）位置可以切换展示的图表样式（柱状图、仪表盘、表格、饼图等等）
+	2. 右侧边栏为该图表配置相关信息：标题、描述
+	3. 图表下方可以配置该图表展示的数据的查询语句，例如：
+
+		- FROM：`cpu_usage_total`（Grafana会自动获取InfluxDB数据库中的元数据，可以直接选择对应表名）
+		- WHERE：添加一个条件，`container_name=cig-cadvisor-1`
+		- ALIAS：配置一个别名，`CPU使用情况汇总`
